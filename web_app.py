@@ -1965,12 +1965,12 @@ HTML_PAGE = """<!DOCTYPE html>
                   <span class="text-xs font-bold text-white font-sans">3-Trade Multi-TP Power System</span>
                   <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emeraldaccent border border-emerald-500/40 font-mono font-bold">SHARED 5% SL</span>
                 </div>
-                <span class="text-[10px] text-emerald-400 font-mono font-bold">Risk: $50.00 Max</span>
+                <span id="otMtpRiskBadge" class="text-[10px] text-emerald-400 font-mono font-bold">Risk: $50.00 Max</span>
               </div>
               <div class="grid grid-cols-3 gap-1.5 text-[10px] font-mono text-center">
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T1 (TP 2%)</span><span class="text-emeraldaccent font-bold">+$20 Target</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T2 (TP 5%)</span><span class="text-emeraldaccent font-bold">+$50 Target</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T3 (AI Runner)</span><span class="text-cyanaccent font-bold">Infinite Upside</span></div>
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T1 (TP 2%)</span><span id="otMtpT1Target" class="text-emeraldaccent font-bold">+$20 Target</span></div>
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T2 (TP 5%)</span><span id="otMtpT2Target" class="text-emeraldaccent font-bold">+$50 Target</span></div>
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T3 (AI Runner)</span><span id="otMtpT3Target" class="text-cyanaccent font-bold">Infinite Upside</span></div>
               </div>
               <p class="text-[10px] text-slate-300 leading-snug">
                 Opens 3 separate trades: T1 locks in guaranteed quick cash, T2 captures the core trend move, and T3 provides an infinite upside trailing stop.
@@ -3416,9 +3416,20 @@ HTML_PAGE = """<!DOCTYPE html>
       const badge = document.getElementById('mtpRiskDollarBadge');
       const ref = parseFloat(refInput ? refInput.value : 1000) || 1000;
       const risk = (ref * 0.05).toFixed(2);
+      const riskPerTrade = (risk / 3.0).toFixed(2);
       if (badge) {
-        badge.innerText = `5.0% ($${risk} max)`;
+        badge.innerText = `5.0% ($${risk} max, $${riskPerTrade}/pos)`;
       }
+
+      // Update Order Ticket preview cards
+      const t1 = document.getElementById('otMtpT1Target');
+      const t2 = document.getElementById('otMtpT2Target');
+      const t3 = document.getElementById('otMtpT3Target');
+      const otRisk = document.getElementById('otMtpRiskBadge');
+      if (t1) t1.innerText = `+$${(ref * 0.02).toFixed(2)} Target`;
+      if (t2) t2.innerText = `+$${(ref * 0.05).toFixed(2)} Target`;
+      if (t3) t3.innerText = `+$${(ref * 0.15).toFixed(2)}+ Runner`;
+      if (otRisk) otRisk.innerText = `Risk: $${risk} Max ($${riskPerTrade}/pos)`;
     }
 
     function useLiveBalanceForMtp() {
@@ -3510,8 +3521,8 @@ HTML_PAGE = """<!DOCTYPE html>
               </div>
             </div>
 
-            <!-- 5 Individual Positions Grid / Table -->
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs font-mono">
+            <!-- Individual Positions Grid (Dynamic 3-Column Power Layout) -->
+            <div class="grid grid-cols-1 ${(g.positions && g.positions.length <= 3) ? 'md:grid-cols-3' : 'md:grid-cols-5'} gap-3 text-xs font-mono">
               ${(g.positions || []).map(p => {
                 const isPosActive = p.status === 'ACTIVE';
                 const posPnl = isPosActive ? (p.floating_profit || 0) : (p.realized_profit || 0);
@@ -3813,7 +3824,7 @@ class DerivServer(BaseHTTPRequestHandler):
             action = data.get("action", "BUY")
             ref_balance = float(data.get("ref_balance", 1000.0))
             lot_per_trade = float(data.get("lot_per_trade", 0.01))
-            ai_notes = data.get("ai_notes", "Manual 5-Trade Multi-TP Execution")
+            ai_notes = data.get("ai_notes", "Manual 3-Trade Multi-TP Execution")
             res = execute_multi_tp_group(
                 symbol=symbol,
                 action=action,

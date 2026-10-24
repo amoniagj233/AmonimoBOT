@@ -1,5 +1,24 @@
 [
   {
+    "setup_id": "GRP-20261024145829-Crash3",
+    "symbol": "Crash 300 Index",
+    "direction": "SELL",
+    "entry_price": 2658.729,
+    "sl": 2691.984,
+    "tp": 2358.644,
+    "volume": 1.5,
+    "tickets": [
+      5814835363,
+      5814835365,
+      5814835370
+    ],
+    "confidence": "95% (3-Trade Multi-TP Power System)",
+    "reason": "3-Trade Multi-TP Power System (Shared 5% SL = $50.00, TPs: +$20, +$50, AI Runner): Setup: Fast Crash Drop Scalp (85%) - M15 EMA20 at 2639.335, RSI(14) at 50.8, ATR(14) at 17.455 | Confluence: RSI in prime short momentum zone (50.8); Ultra-low spread (0.042%)",
+    "execution_type": "MULTI_TP_3_TRADES",
+    "execution_time": "2026-10-24 14:58:32 UTC",
+    "status": "OPEN"
+  },
+  {
     "setup_id": "GRP-20261024144842-Crash3",
     "symbol": "Crash 300 Index",
     "direction": "BUY",
@@ -384,7 +403,7 @@
     "reason": "M15 EMA20 at 5772.48, RSI(14) at 54.3, ATR(14) at 51.46 | Confluence: RSI in prime short momentum zone (54.3); Ultra-low spread (0.033%)",
     "execution_type": "MANUAL (1-Click)",
     "execution_time": "2026-10-24 11:28:16 UTC",
-    "status": "OPEN"
+    "status": "CLOSED"
   },
   {
     "setup_id": "Volatility_50_(1s)_Index_BUY_9960227",
@@ -399,7 +418,7 @@
       5814723727
     ],
     "execution_time": "2026-10-24 11:21:38 UTC",
-    "status": "OPEN"
+    "status": "CLOSED"
   },
   {
     "setup_id": "SOLUSD_SELL_9960227",
