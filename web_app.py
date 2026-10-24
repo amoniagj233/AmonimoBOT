@@ -177,7 +177,7 @@ def calculate_setup_confidence(sym_info, tick, closes, highs, lows, ema20, rsi, 
     Rigorous Multi-Factor Confidence Scoring (Rule 2):
       Evaluates trend confirmation, market structure, momentum/RSI, liquidity/spread, and risk ratio.
       Returns (score: int, signals: list).
-      Only exceptional setups with multi-indicator alignment reach 90-100%.
+      Only exceptional setups with multi-indicator alignment reach 88-100%.
     """
     score = 65  # Base score for passing initial M15 boundary scan
     signals = []
@@ -545,7 +545,7 @@ class AutomatedSetupScanner:
     Continuous 3-Minute Background Scanning & Automated Execution Engine
     Enforces:
       1. Market status verification (no closed markets).
-      2. 90-100% High-Confidence automatic trade execution (when auto-trading enabled).
+      2. 88-100% High-Confidence automatic trade execution (when auto-trading enabled).
       3. Mandatory risk management (SL, TP, 1% risk sizing, margin gates, no duplicates).
       4. Dynamic setup lifecycle (ACTIVE, EXECUTED, INVALIDATED, MARKET CLOSED).
       5. Complete trade tracking journal with confidence and reasons.
@@ -827,7 +827,7 @@ class AutomatedSetupScanner:
                     "action": bias,
                     "confidence_score": confidence_score,
                     "conviction": f"{confidence_score}%",
-                    "is_high_confidence": confidence_score >= 90,
+                    "is_high_confidence": confidence_score >= 88,
                     "status": "ACTIVE",
                     "entry": round(entry, digits),
                     "sl": round(sl, digits),
@@ -843,8 +843,8 @@ class AutomatedSetupScanner:
                     "symbol_perf": get_symbol_perf_summary(sym)
                 }
 
-                # HIGH-CONFIDENCE AUTOMATIC EXECUTION (Rule 2 & 3)
-                if confidence_score >= 90 and self.auto_trade_enabled:
+                # HIGH-CONFIDENCE AUTOMATIC EXECUTION (Rule 2 & 3: 88-100% Auto-Trade Threshold)
+                if confidence_score >= 88 and self.auto_trade_enabled:
                     # Risk gate: Disallow automatic execution on Priority 5 (AVOID) symbols with severe historical losses
                     if setup_obj.get("symbol_perf", {}).get("priority_num") == 5:
                         filtered_reasons[sym] = f"Auto-Execution blocked: {sym} has historical Priority 5 (AVOID) status (Severe Loss Skew/Drawdown). Manual confirmation required."
@@ -867,7 +867,7 @@ class AutomatedSetupScanner:
                             action=bias,
                             ref_balance=balance,
                             default_lot=0.01,
-                            ai_notes=f"Auto-Execution (90-100% Score): {tech_signals}"
+                            ai_notes=f"Auto-Execution (88-100% Score): {tech_signals}"
                         )
                         if order_res.get("success"):
                             setup_obj["status"] = "EXECUTED"
@@ -1105,7 +1105,7 @@ def execute_deriv_order(symbol, action, volume, sl=0.0, tp=0.0, trades_count=1, 
                 tickets=executed_tickets,
                 confidence=confidence,
                 reason=reason,
-                execution_type="MANUAL (1-Click)" if "AUTO" not in comment else "AUTO_EXECUTED (90-100% Conf)"
+                execution_type="MANUAL (1-Click)" if "AUTO" not in comment else "AUTO_EXECUTED (88-100% Conf)"
             )
             
             tickets_str = ", ".join(f"#{t}" for t in executed_tickets)
@@ -1687,9 +1687,9 @@ HTML_PAGE = """<!DOCTYPE html>
 
         <div class="flex flex-wrap items-center gap-2">
           
-          <!-- AUTO-TRADING TOGGLE (Rule 2: 90-100% High Confidence Auto Execution) -->
+          <!-- AUTO-TRADING TOGGLE (Rule 2: 88-100% High Confidence Auto Execution) -->
           <div class="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-900 border border-bordercol shadow-inner">
-            <span class="text-slate-400 font-sans text-xs font-medium">Auto-Trade (90-100% Conf):</span>
+            <span class="text-slate-400 font-sans text-xs font-medium">Auto-Trade (88-100% Conf):</span>
             <button id="autoTradeBtn" onclick="toggleAutoTrade()" class="px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1.5 bg-slate-800 text-slate-400 border border-slate-700">
               <span id="autoTradeDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
               <span id="autoTradeText">DISABLED</span>
@@ -2495,7 +2495,7 @@ HTML_PAGE = """<!DOCTYPE html>
         grid.innerHTML = setups.map(s => {
           const isBuy = s.action === 'BUY';
           const badgeClass = isBuy ? 'bg-emerald-500/10 text-emeraldaccent border-emerald-500/20' : 'bg-red-500/10 text-crimsonaccent border-red-500/20';
-          const isHighConf = s.confidence_score >= 90;
+          const isHighConf = s.confidence_score >= 88;
           const confBadgeClass = isHighConf ? 'bg-emerald-500/20 text-emeraldaccent border-emerald-500/40 shadow-sm shadow-emerald-500/20 font-black' : 'bg-blue-500/10 text-blue-400 font-mono';
 
           return `
@@ -2513,7 +2513,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 </div>
                 <div class="text-xs font-bold text-slate-200 mt-1 flex items-center justify-between">
                   <span>${s.setup_name}</span>
-                  ${isHighConf ? '<span class="text-[10px] text-emeraldaccent font-mono font-bold">90-100% CONFIDENCE</span>' : ''}
+                  ${isHighConf ? '<span class="text-[10px] text-emeraldaccent font-mono font-bold">88-100% CONFIDENCE</span>' : ''}
                 </div>
               </div>
 
@@ -2567,7 +2567,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <!-- Auto-Trade Status Banner if High Confidence -->
               ${isHighConf ? `
                 <div class="p-2 rounded bg-emerald-950/30 border border-emerald-900/40 text-[10px] text-emerald-300 font-mono flex items-center justify-between">
-                  <span>⚡ 90-100% Setup Trigger</span>
+                  <span>⚡ 88-100% Setup Trigger</span>
                   <span class="font-bold">${autoTradeEnabled ? 'ARMED FOR AUTO-EXECUTE' : 'Auto-Trade is OFF'}</span>
                 </div>
               ` : ''}
