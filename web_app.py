@@ -861,7 +861,7 @@ class AutomatedSetupScanner:
                     )
                     
                     if risk_checks_passed:
-                        # Auto-execute via 5-Trade Multi-TP System with Shared 5% Stop Loss
+                        # Auto-execute via 3-Trade Multi-TP Power System with Shared 5% Stop Loss
                         order_res = execute_multi_tp_group(
                             symbol=sym,
                             action=bias,
@@ -1306,14 +1306,12 @@ def sync_multi_tp_groups():
 
 def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01, ai_notes="AI Quantitative Setup", custom_lots=None):
     """
-    Executes an Automatic 5-Trade Multi-TP System on Deriv MT5:
-      - 5 separate positions in the same direction.
-      - Shared Stop Loss at 5% of ref_balance ($50 planned loss across all 5 trades combined).
-      - Trade 1: TP 1% (+$10 on $1,000)
-      - Trade 2: TP 2% (+$20 on $1,000)
-      - Trade 3: TP 5% (+$50 on $1,000)
-      - Trade 4: TP 10% (+$100 on $1,000)
-      - Trade 5: System TP (AI dynamic runner, e.g. +$150 / 15% or 2.5x ATR)
+    Executes an Automatic 3-Trade Multi-TP Power System on Deriv MT5:
+      - 3 separate positions in the same direction.
+      - Shared Stop Loss at 5% of ref_balance ($50 planned loss across all 3 trades combined).
+      - Trade 1: TP 2% (+$20 on $1,000) - High hit rate (~65%), locks in guaranteed profit.
+      - Trade 2: TP 5% (+$50 on $1,000) - Core trend move (~35%), captures the meat of the trend.
+      - Trade 3: Dynamic AI Runner (+15% / +$150 or 2.5x ATR) - Infinite upside trailing stop for massive breakout days.
       - Default 0.01 lot per trade (or symbol volume_min).
     """
     with mt5_lock:
@@ -1339,22 +1337,22 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
         entry_price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
         digits = info.digits
 
-        # Lot size resolution
+        # Lot size resolution (3 positions)
         lot = float(custom_lots) if custom_lots else float(default_lot)
         if lot < info.volume_min:
             lot = info.volume_min
         lot = round(lot, 2)
-        total_lots = round(lot * 5, 2)
+        total_lots = round(lot * 3, 2)
 
         # Margin & Broker Limit Verification
         acc = mt5.account_info()
         if acc:
             if acc.limit_orders > 0:
                 current_pos_count = len(mt5.positions_get() or [])
-                if current_pos_count + 5 > acc.limit_orders:
+                if current_pos_count + 3 > acc.limit_orders:
                     return {
                         "success": False,
-                        "message": f"Broker position limit ({acc.limit_orders}) will be exceeded. Currently open: {current_pos_count} positions. Please close positions before opening a 5-trade group."
+                        "message": f"Broker position limit ({acc.limit_orders}) will be exceeded. Currently open: {current_pos_count} positions. Please close positions before opening a 3-trade group."
                     }
             est_margin = mt5.order_calc_margin(order_type, symbol, total_lots, entry_price)
             if est_margin and est_margin > acc.margin_free:
@@ -1374,10 +1372,10 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
         if dollar_per_unit_price <= 0:
             dollar_per_unit_price = lot * 1.0
 
-        # Stop Loss — 5% Maximum Risk (Rule 2)
+        # Stop Loss — 5% Maximum Risk across 3 positions
         ref_balance = float(ref_balance) if ref_balance else 1000.0
         total_risk_dollar = round(ref_balance * 0.05, 2)  # $50.00
-        risk_per_trade_dollar = round(total_risk_dollar / 5.0, 2)  # $10.00
+        risk_per_trade_dollar = round(total_risk_dollar / 3.0, 2)  # $16.67 per trade
 
         sl_dist = risk_per_trade_dollar / dollar_per_unit_price
         shared_sl = round(entry_price - sl_dist if order_type == mt5.ORDER_TYPE_BUY else entry_price + sl_dist, digits)
@@ -1389,22 +1387,23 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
             sl_dist = min_stop_dist
             shared_sl = round(entry_price - sl_dist if order_type == mt5.ORDER_TYPE_BUY else entry_price + sl_dist, digits)
 
-        # Individual Take Profit Targets (Rule 3 & 4)
+        # Individual Take Profit Targets: 3-Trade Power System
+        # Trade 1: TP 2% (+$20 Target) - Locks in quick guaranteed profit
+        # Trade 2: TP 5% (+$50 Target) - Captures the meat of the trend move
+        # Trade 3: Dynamic AI Runner - Infinite upside trailing runner
         rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M15, 0, 15)
         atr_pts = 0.0
         if rates is not None and len(rates) >= 5:
             trs = [max(r["high"] - r["low"], abs(r["high"] - r["close"]), abs(r["low"] - r["close"])) for r in rates]
             atr_pts = sum(trs) / len(trs)
 
-        ai_tp_dollar = round(ref_balance * 0.15, 2)  # $150.00 (15%)
+        ai_tp_dollar = round(ref_balance * 0.15, 2)  # $150.00
         ai_tp_dist = max(ai_tp_dollar / dollar_per_unit_price, (atr_pts * 2.5) if atr_pts > 0 else 0.0)
 
         tp_configs = [
-            {"sub_id": 1, "name": "Trade 1", "pct": "1%", "target_dollar": round(ref_balance * 0.01, 2), "dist": (ref_balance * 0.01) / dollar_per_unit_price},
-            {"sub_id": 2, "name": "Trade 2", "pct": "2%", "target_dollar": round(ref_balance * 0.02, 2), "dist": (ref_balance * 0.02) / dollar_per_unit_price},
-            {"sub_id": 3, "name": "Trade 3", "pct": "5%", "target_dollar": round(ref_balance * 0.05, 2), "dist": (ref_balance * 0.05) / dollar_per_unit_price},
-            {"sub_id": 4, "name": "Trade 4", "pct": "10%", "target_dollar": round(ref_balance * 0.10, 2), "dist": (ref_balance * 0.10) / dollar_per_unit_price},
-            {"sub_id": 5, "name": "Trade 5", "pct": "AI System", "target_dollar": ai_tp_dollar, "dist": ai_tp_dist}
+            {"sub_id": 1, "name": "Trade 1", "pct": "2%", "target_dollar": round(ref_balance * 0.02, 2), "dist": (ref_balance * 0.02) / dollar_per_unit_price},
+            {"sub_id": 2, "name": "Trade 2", "pct": "5%", "target_dollar": round(ref_balance * 0.05, 2), "dist": (ref_balance * 0.05) / dollar_per_unit_price},
+            {"sub_id": 3, "name": "Trade 3", "pct": "AI Runner", "target_dollar": ai_tp_dollar, "dist": ai_tp_dist}
         ]
 
         filling_mode = get_best_filling_mode(info)
@@ -1465,7 +1464,7 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
         if not executed_positions:
             return {
                 "success": False,
-                "message": f"Execution failed for all 5 positions: {'; '.join(errors)}"
+                "message": f"Execution failed for all 3 positions: {'; '.join(errors)}"
             }
 
         group_obj = {
@@ -1503,9 +1502,9 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
             tp=executed_positions[-1]["tp"],
             volume=group_obj["total_volume"],
             tickets=[p["ticket"] for p in executed_positions],
-            confidence="95% (Multi-TP 5-Trade System)",
-            reason=f"5-Trade Multi-TP System (Shared 5% SL = ${total_risk_dollar:.2f}, TPs: +$10, +$20, +$50, +$100, AI): {ai_notes}",
-            execution_type="MULTI_TP_5_TRADES"
+            confidence="95% (3-Trade Multi-TP Power System)",
+            reason=f"3-Trade Multi-TP Power System (Shared 5% SL = ${total_risk_dollar:.2f}, TPs: +$20, +$50, AI Runner): {ai_notes}",
+            execution_type="MULTI_TP_3_TRADES"
         )
 
         return {
@@ -1517,7 +1516,7 @@ def execute_multi_tp_group(symbol, action, ref_balance=1000.0, default_lot=0.01,
             "shared_sl": shared_sl,
             "total_risk_dollar": total_risk_dollar,
             "positions_opened": len(executed_positions),
-            "message": f"Successfully opened {len(executed_positions)} of 5 Multi-TP positions on {symbol} (Group: {group_id}) with shared 5% SL @ {shared_sl}.",
+            "message": f"Successfully opened {len(executed_positions)} of 3 Multi-TP positions on {symbol} (Group: {group_id}) with shared 5% SL @ {shared_sl}.",
             "errors": errors
         }
 
@@ -1742,11 +1741,11 @@ HTML_PAGE = """<!DOCTYPE html>
           <div class="flex items-center gap-2.5">
             <h2 class="text-sm font-bold text-white flex items-center gap-2 font-sans">
               <svg class="w-4 h-4 text-emeraldaccent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-              Multi-TP Trade Manager (5-Trade Multi-TP System)
+              Multi-TP Trade Manager (3-Trade Multi-TP Power System)
             </h2>
             <span id="mtpGroupsBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emeraldaccent border border-emerald-500/20 font-mono font-semibold">0 GROUPS</span>
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">5 separate positions per opportunity with individual Take Profits (+1%, +2%, +5%, +10%, AI runner) and a shared 5% account Stop Loss ($50 planned loss max).</p>
+          <p class="text-xs text-slate-400 mt-0.5">3 separate positions per setup: Trade 1 (+2% / $20), Trade 2 (+5% / $50), and Trade 3 (AI Dynamic Runner) with a shared 5% account Stop Loss ($50 planned loss max).</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
@@ -1958,29 +1957,27 @@ HTML_PAGE = """<!DOCTYPE html>
               </div>
             </div>
 
-            <!-- 5-Trade Multi-TP System Sizing & Execution Panel (Requirements 1-6) -->
+            <!-- 3-Trade Multi-TP Power System Sizing & Execution Panel -->
             <div class="p-3.5 rounded-lg bg-emerald-950/20 border border-emerald-500/40 space-y-2.5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
                   <span class="text-sm">⚡</span>
-                  <span class="text-xs font-bold text-white font-sans">5-Trade Multi-TP System</span>
+                  <span class="text-xs font-bold text-white font-sans">3-Trade Multi-TP Power System</span>
                   <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emeraldaccent border border-emerald-500/40 font-mono font-bold">SHARED 5% SL</span>
                 </div>
                 <span class="text-[10px] text-emerald-400 font-mono font-bold">Risk: $50.00 Max</span>
               </div>
-              <div class="grid grid-cols-5 gap-1 text-[10px] font-mono text-center">
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T1 (1%)</span><span class="text-emeraldaccent font-bold">+$10</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T2 (2%)</span><span class="text-emeraldaccent font-bold">+$20</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T3 (5%)</span><span class="text-emeraldaccent font-bold">+$50</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T4 (10%)</span><span class="text-emeraldaccent font-bold">+$100</span></div>
-                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T5 (AI)</span><span class="text-cyanaccent font-bold">Runner</span></div>
+              <div class="grid grid-cols-3 gap-1.5 text-[10px] font-mono text-center">
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T1 (TP 2%)</span><span class="text-emeraldaccent font-bold">+$20 Target</span></div>
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T2 (TP 5%)</span><span class="text-emeraldaccent font-bold">+$50 Target</span></div>
+                <div class="p-1.5 rounded bg-slate-900 border border-slate-800"><span class="text-slate-400 block text-[8px]">T3 (AI Runner)</span><span class="text-cyanaccent font-bold">Infinite Upside</span></div>
               </div>
               <p class="text-[10px] text-slate-300 leading-snug">
-                Opens 5 separate trades with independent TPs and an exact shared Stop Loss capping combined planned loss at 5% ($50 on $1k balance).
+                Opens 3 separate trades: T1 locks in guaranteed quick cash, T2 captures the core trend move, and T3 provides an infinite upside trailing stop.
               </p>
               <button type="button" onclick="executeMtpFromCurrentForm()" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                Execute 5-Trade Multi-TP System
+                Execute 3-Trade Multi-TP System
               </button>
             </div>
 
@@ -2578,7 +2575,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <!-- Action Buttons -->
               <div class="space-y-1.5 pt-1">
                 <button type="button" onclick='executeMtpDirectlyFromSetup(${JSON.stringify(s)})' class="w-full py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emeraldaccent border border-emerald-500/40 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-sm">
-                  ⚡ 5-Trade Multi-TP System (Shared 5% SL &bull; $50 Risk)
+                  ⚡ 3-Trade Multi-TP System (Shared 5% SL &bull; $50 Risk)
                 </button>
                 <div class="grid grid-cols-2 gap-2">
                   <button type="button" onclick='loadSetupIntoForm(${JSON.stringify(s)})' class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition flex items-center justify-center gap-1 border border-bordercol">
@@ -3460,7 +3457,7 @@ HTML_PAGE = """<!DOCTYPE html>
             <span class="text-2xl block">⚡</span>
             <div class="text-xs font-bold text-slate-200 uppercase tracking-wider">No Active Multi-TP Trade Groups</div>
             <p class="text-[11px] text-slate-400 max-w-md mx-auto">
-              Execute a 5-Trade Multi-TP opportunity from the Order Ticket or Active Setups cards. Each opportunity opens 5 separate positions with independent Take Profits (+1%, +2%, +5%, +10%, AI runner) and a shared 5% Stop Loss ($50 planned loss max).
+              Execute a 3-Trade Multi-TP opportunity from the Order Ticket or Active Setups cards. Each opportunity opens 3 separate positions: Trade 1 (+2% / $20), Trade 2 (+5% / $50), and Trade 3 (AI Dynamic Runner with infinite upside) with a shared 5% Stop Loss ($50 planned loss max).
             </p>
           </div>
         `;
@@ -3584,21 +3581,19 @@ HTML_PAGE = """<!DOCTYPE html>
       const riskDollar = (refBalance * 0.05).toFixed(2);
       const riskPerTrade = (refBalance * 0.01).toFixed(2);
 
-      if (!confirm(`Execute 5-Trade Multi-TP System on ${sym} (${action})?\n\n` +
-                   `• 5 Separate Positions: ${(lotPerTrade * 5).toFixed(2)} total lots (${lotPerTrade} lots each)\n` +
-                   `• Shared Stop Loss: 5% maximum planned risk ($${riskDollar} total, $${riskPerTrade} per position)\n` +
-                   `• Trade 1: TP 1% (+$${(refBalance*0.01).toFixed(0)})\n` +
-                   `• Trade 2: TP 2% (+$${(refBalance*0.02).toFixed(0)})\n` +
-                   `• Trade 3: TP 5% (+$${(refBalance*0.05).toFixed(0)})\n` +
-                   `• Trade 4: TP 10% (+$${(refBalance*0.10).toFixed(0)})\n` +
-                   `• Trade 5: Dynamic AI Runner (+15% / +$${(refBalance*0.15).toFixed(0)})\n\n` +
-                   `Transmit all 5 orders directly to Deriv MT5 terminal?`)) {
+      if (!confirm(`Execute 3-Trade Multi-TP Power System on ${sym} (${action})?\n\n` +
+                   `• 3 Separate Positions: ${(lotPerTrade * 3).toFixed(2)} total lots (${lotPerTrade} lots each)\n` +
+                   `• Shared Stop Loss: 5% maximum planned risk ($${riskDollar} total, $${(riskDollar/3).toFixed(2)} per position)\n` +
+                   `• Trade 1: TP 2% (+$${(refBalance*0.02).toFixed(0)} Target) - High hit rate, banks quick profit\n` +
+                   `• Trade 2: TP 5% (+$${(refBalance*0.05).toFixed(0)} Target) - Core trend move capture\n` +
+                   `• Trade 3: Dynamic AI Runner (Infinite Upside / Trailing Stop)\n\n` +
+                   `Transmit all 3 orders directly to Deriv MT5 terminal?`)) {
         return;
       }
 
       const statusBox = document.getElementById('orderStatusMsg');
       statusBox.className = 'text-xs p-3 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20';
-      statusBox.innerText = `Transmitting 5-Trade Multi-TP group on ${sym} to Deriv MT5...`;
+      statusBox.innerText = `Transmitting 3-Trade Multi-TP group on ${sym} to Deriv MT5...`;
       statusBox.classList.remove('hidden');
 
       try {
@@ -3636,10 +3631,10 @@ HTML_PAGE = """<!DOCTYPE html>
       const refBalance = parseFloat(refInput ? refInput.value : 1000) || 1000;
       const riskDollar = (refBalance * 0.05).toFixed(2);
 
-      if (!confirm(`Execute 5-Trade Multi-TP System for Setup: ${s.setup_name} on ${sym} (${action})?\n\n` +
+      if (!confirm(`Execute 3-Trade Multi-TP Power System for Setup: ${s.setup_name} on ${sym} (${action})?\n\n` +
                    `• Symbol: ${sym} (${action})\n` +
                    `• Shared 5% Stop Loss: $${riskDollar} maximum planned loss combined\n` +
-                   `• 5 Independent Positions with targets: +1% ($10), +2% ($20), +5% ($50), +10% ($100), AI Runner\n` +
+                   `• 3 Independent Positions: Trade 1 (+2% / $20), Trade 2 (+5% / $50), Trade 3 (AI Dynamic Runner)\n` +
                    `• Conviction Score: ${s.conviction}\n\n` +
                    `Proceed with automatic execution on Deriv MT5?`)) {
         return;

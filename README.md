@@ -8,16 +8,14 @@ AmonimoBOT is an institutional-grade algorithmic trading terminal and web dashbo
 
 ## 🚀 Key Features
 
-### 1. ⚡ Automatic 5-Trade Multi-TP Execution System
-- **5 Concurrent Positions:** Simultaneously opens 5 separate positions in the same direction on the symbol.
-- **Shared 5% Account Stop Loss:** Combined planned loss across all 5 trades is strictly bounded to **5% of the reference account balance** (\$50.00 max on a \$1,000 balance; \$10.00 planned risk per trade). All 5 positions share the exact same protective Stop Loss price level.
-- **Dynamic Multi-Tier Profit Targets:**
-  - **Trade 1:** TP 1% (+\$10.00 on \$1,000) — Rapid scalp to lock in early momentum.
-  - **Trade 2:** TP 2% (+\$20.00 on \$1,000) — Structural target #1.
-  - **Trade 3:** TP 5% (+\$50.00 on \$1,000) — Core trend wave target.
-  - **Trade 4:** TP 10% (+\$100.00 on \$1,000) — Extended trend runner.
-  - **Trade 5:** Dynamic AI Runner (+\$150.00 / 2.5× ATR) — Volatility-expanded swing target.
-- **Independent Position Lifecycle:** If an individual TP target is reached, only that position closes, securing realized profit while other runners remain active. If the shared Stop Loss is breached, all remaining positions in the group close simultaneously.
+### 1. ⚡ Automatic 3-Trade Multi-TP Power System
+- **3 Concurrent Positions:** Simultaneously opens 3 separate positions in the same direction on the symbol, maximizing capital efficiency without crowding broker position limits.
+- **Shared 5% Account Stop Loss:** Combined planned loss across all 3 trades is strictly bounded to **5% of the reference account balance** (\$50.00 max on a \$1,000 balance; \$16.67 planned risk per trade). All 3 positions share the exact same protective Stop Loss price level.
+- **Dynamic 3-Tier Profit Targets:**
+  - **Trade 1:** TP 2% (+\$20.00 on \$1,000) — High hit rate (~65%), locks in guaranteed quick cash, covers spreads/commissions.
+  - **Trade 2:** TP 5% (+\$50.00 on \$1,000) — Core trend move capture (~35%), banks the meat of the move.
+  - **Trade 3:** Dynamic AI Runner (+\$150.00 / 2.5× ATR) — Infinite upside trailing stop for massive breakout days.
+- **Independent Position Lifecycle:** When an individual TP target is reached, only that position closes, securing realized profit while other runners remain active. If the shared Stop Loss is breached, all remaining positions in the group close simultaneously.
 
 ### 2. 📡 Automated Recommended Trade Setups & Technical Invalidation
 - **Continuous 3-Minute Re-Scan:** Auto-refreshes trading opportunities every 3 minutes across 21+ Deriv synthetic indices, forex pairs, and crypto assets.
