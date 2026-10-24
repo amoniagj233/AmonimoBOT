@@ -1,0 +1,38 @@
+[
+  {
+    "abs_z": 7.65,
+    "comment": "ret_1d z-score exceeded 2.0",
+    "metric": "ret_1d",
+    "scope": "stock",
+    "symbol": "ALFA",
+    "value": 0.16259,
+    "z": 7.65
+  },
+  {
+    "abs_z": 7.645,
+    "comment": "atr_pct z-score exceeded 2.0",
+    "metric": "atr_pct",
+    "scope": "stock",
+    "symbol": "ALFA",
+    "value": 0.02867,
+    "z": 7.645
+  },
+  {
+    "abs_z": 7.623,
+    "comment": "gap z-score exceeded 2.0",
+    "metric": "gap",
+    "scope": "stock",
+    "symbol": "ALFA",
+    "value": 0.11608,
+    "z": 7.623
+  },
+  {
+    "abs_z": 7.598,
+    "comment": "rel_volume z-score exceeded 2.0",
+    "metric": "rel_volume",
+    "scope": "stock",
+    "symbol": "ALFA",
+    "value": 2.65293,
+    "z": 7.598
+  }
+]

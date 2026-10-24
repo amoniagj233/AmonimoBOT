@@ -1,0 +1,71 @@
+schema_version: 1
+workflow_id: stockbee-20pct-study-daily
+fixed_timestamp: "2026-01-06T23:00:00+00:00"
+
+inputs:
+  prices: replay-inputs/prices.json
+  news: replay-inputs/news.json
+  accepted_lessons: replay-inputs/accepted_lessons.yaml
+
+steps:
+  - step: 1
+    executor: twenty_pct_scan
+    executor_mode: native_cli
+    gate_policy: continue
+    output_files:
+      twenty_pct_mover_events:
+        canonical: 01_twenty_pct_mover_events.json
+        state: 01_twenty_pct_events.jsonl
+
+  - step: 2
+    executor: twenty_pct_enrich
+    executor_mode: native_cli
+    gate_policy: continue
+    output_files:
+      classified_event_study:
+        canonical: 02_classified_event_study.json
+        state: 02_twenty_pct_events.jsonl
+
+  - step: 3
+    executor: twenty_pct_update_outcomes
+    executor_mode: native_cli
+    gate_policy: continue
+    output_files:
+      matured_event_outcomes:
+        canonical: 03_matured_event_outcomes.json
+        state: 03_twenty_pct_events.jsonl
+
+  - step: 4
+    executor: twenty_pct_summarize
+    executor_mode: native_cli
+    gate_policy: record_only
+    output_files:
+      twenty_pct_cohort_summary:
+        canonical: 04_twenty_pct_cohort_summary.json
+      edge_hints_yaml:
+        canonical: 04_edge_hints.yaml
+
+  - step: 5
+    executor: manual_twenty_pct_lessons
+    executor_mode: manual_contract
+    gate_policy: record_only
+    output_files:
+      accepted_lessons_log:
+        canonical: 05_accepted_lessons_log.yaml
+
+variants:
+  required-only:
+    enabled_steps:
+      - 1
+      - 2
+      - 3
+      - 4
+    golden_dir: sample-run
+  full-path:
+    enabled_steps:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    golden_dir: sample-run-full-path

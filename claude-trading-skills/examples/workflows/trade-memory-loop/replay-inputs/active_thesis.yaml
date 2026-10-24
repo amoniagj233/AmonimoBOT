@@ -1,0 +1,86 @@
+thesis_id: th_exmpl_growth_20260108_a1b2
+ticker: EXMPL
+created_at: '2026-01-05T13:00:00+00:00'
+updated_at: '2026-01-08T14:35:00+00:00'
+thesis_type: growth_momentum
+setup_type: vcp_breakout
+catalyst: Fictional Q4 earnings beat plus a multi-week VCP base breakout
+status: ACTIVE
+status_history:
+  - status: IDEA
+    at: '2026-01-05T13:00:00+00:00'
+    reason: Surfaced by a fictional vcp-screener fixture
+  - status: ENTRY_READY
+    at: '2026-01-07T18:00:00+00:00'
+    reason: Fictional weekly base passed manual review
+  - status: ACTIVE
+    at: '2026-01-08T14:35:00+00:00'
+    reason: Fictional pivot cleared on volume
+thesis_statement: >-
+  Fictional EXMPL completed a tight VCP base after a fictional earnings beat;
+  a breakout through 142.50 may resolve into a momentum advance.
+mechanism_tag: structure
+evidence:
+  - Fictional VCP base with three contractions
+  - Fictional relative-strength line at a new high
+kill_criteria:
+  - Close below the 134.50 stop
+confidence: medium
+confidence_score: 0.6
+entry:
+  target_price: 142.5
+  conditions:
+    - Break and hold above the fictional 142.50 pivot
+  actual_price: 142.1
+  actual_date: '2026-01-08T14:35:00+00:00'
+exit:
+  stop_loss: 134.5
+  stop_loss_pct: -5.35
+  take_profit: 157.3
+  take_profit_rr: 2.0
+  time_stop_days: 60
+  actual_price: null
+  actual_date: null
+  exit_reason: null
+position:
+  shares: 70
+  shares_remaining: 70
+  position_value: 9947.0
+  risk_dollars: 532.0
+  risk_pct_of_account: 0.53
+  account_type: margin
+  sizing_method: fixed_risk_1pct
+  raw_source:
+    skill: position-sizer
+    file: fictional-position-sizer.json
+    fields:
+      account_size: 100000
+      risk_pct: 1.0
+market_context:
+  regime: RISK_ON
+  breadth_score: 66
+  top_detector_score: null
+  sector: Technology
+monitoring:
+  review_interval_days: 30
+  next_review_date: '2026-02-07'
+  last_review_date: null
+  review_status: OK
+  triggers_config: []
+  alerts: []
+origin_fingerprint: null
+origin:
+  skill: vcp-screener
+  output_file: fictional-vcp-screen.json
+  screening_grade: A
+  screening_score: 88
+  raw_provenance: {}
+linked_reports: []
+outcome:
+  pnl_dollars: null
+  pnl_pct: null
+  holding_days: null
+  mae_pct: null
+  mfe_pct: null
+  mae_mfe_source: null
+  lessons_learned: null

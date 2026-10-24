@@ -1,0 +1,13 @@
+human_approved: true
+variant: required-only
+decision: journal_only
+source_sha256:
+  postmortem_findings: 3272ce966dcbad845619cfbbf53afd3e616286b00d2bf785544862a84e9c7c18  # pragma: allowlist secret
+execution_mode: composite
+components:
+- native_api
+- manual_contract
+atomicity_scope:
+  individual_state_files: atomic replace by trader-memory-core
+  temporary_state: discarded on replay failure
+  published_tree: transactional replacement by workflow replay harness

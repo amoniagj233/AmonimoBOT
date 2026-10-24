@@ -1,0 +1,64 @@
+    # -- COT surface (cot-contrarian-detector, Issue #495 Batch A) ------------
+
+    # Value-based + pattern-based apikey redaction for (data, error) results.
+    # Mirrors the script's own defense-in-depth: headers keep the key out of
+    # URLs, but a 4xx body can echo a *bare* key with no "apikey" marker, so
+    # the client's own _redact_key alone is NOT sufficient here (#357 class).
+    # These literals are static patterns — no live response data flows into
+    # them.
+
+    _COT_APIKEY_PATTERNS = (
+        re.compile(r"apikey\s*=\s*[^&\s'\"]+", re.IGNORECASE),
+        re.compile(r'"apikey"\s*:\s*"[^"]*"', re.IGNORECASE),
+        re.compile(r"'apikey'\s*:\s*'[^']*'", re.IGNORECASE),
+        re.compile(r"apikey%3d[^&\s'\"]+", re.IGNORECASE),
+    )
+
+    def _cot_redact(self, text: Optional[str]) -> Optional[str]:
+        """Redact the API key from an error string (value + pattern layers)."""
+        if not text:
+            return text
+        if self.api_key:
+            text = text.replace(self.api_key, "***REDACTED***")
+        for pattern in self._COT_APIKEY_PATTERNS:
+            text = pattern.sub("apikey=***REDACTED***", text)
+        return text
+
+    def _cot_error(self) -> Optional[str]:
+        """Build a redacted error string from the last transport status."""
+        return self._cot_redact(self._last_error)
+
+    def get_market_list(self) -> list[dict]:
+        """Fetch every COT-covered market: [{"symbol","name"}, ...].
+
+        Contract preserved from the hand-rolled ``CotClient``: failures
+        raise ``RuntimeError("Failed to fetch COT market list: <reason>")``
+        so ``resolve_universe`` can't continue on a silent empty list.
+        """
+        url = "https://financialmodelingprep.com/stable/commitment-of-traders-list"
+        data = self._rate_limited_get(url, params={}, quiet=True)
+        error = self._cot_error()
+        if data is None:
+            raise RuntimeError(f"Failed to fetch COT market list: {error}")
+        return data if isinstance(data, list) else []
+
+    def get_report(
+        self, symbol: str, from_date: str, to_date: str
+    ) -> tuple[list[dict], Optional[str]]:
+        """Fetch raw legacy-format COT report rows for one symbol.
+
+        Returns ``(rows, None)`` on success and ``([], <redacted reason>)``
+        on failure — the ``(data, error)`` contract the script's
+        ``analyze_market`` and the "Skipped Markets" report section consume.
+        """
+        url = "https://financialmodelingprep.com/stable/commitment-of-traders-report"
+        data = self._rate_limited_get(
+            url, params={"symbol": symbol, "from": from_date, "to": to_date}, quiet=True
+        )
+        error = self._cot_error()
+        if error is not None:
+            # Surface the failure without the client's generic print (this
+            # surface feeds a user-visible "Skipped Markets" reason).
+            print(f"WARN: {error}", file=sys.stderr)
+            return [], error
+        return data if isinstance(data, list) else [], None

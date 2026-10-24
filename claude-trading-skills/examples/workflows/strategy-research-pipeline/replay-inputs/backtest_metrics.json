@@ -1,0 +1,16 @@
+{
+  "ticket_id": "edge_auto_vcp_alfa_20260828",
+  "as_of": "2026-08-28",
+  "universe": "ALFA fictional replay series",
+  "period": "fictional offline sample",
+  "cost_assumptions": {"slippage_bps": 5, "commission_per_share": 0.0},
+  "source": "fictional separately supplied aggregate metrics; no backtest run by replay",
+  "total_trades": 125,
+  "win_rate": 55.0,
+  "avg_win_pct": 8.0,
+  "avg_loss_pct": 4.0,
+  "max_drawdown_pct": 15.0,
+  "years_tested": 5,
+  "num_parameters": 3,
+  "slippage_tested": true
+}

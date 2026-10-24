@@ -1,0 +1,1175 @@
+"""Tests for the FMP provider response contracts (Issue #332).
+
+Covers: contract file structural validation (D1), the #328 rename
+regression + missing/null/wrong-type/empty anomaly detection (D2), the ten
+generated ``fmp_client.py`` files exercised against the real contract
+fixtures (D3), the CLI's network-free ``check`` (D5), importability with
+``requests`` blocked (D6), and the injectable-fetch ``canary`` (D7).
+
+Consumer field-contract tests for earnings-trade-analyzer / pead-screener
+(plan section D item 4, "D4") are intentionally NOT here — see
+``skills/earnings-trade-analyzer/scripts/tests/test_earnings_trade_analyzer.py``
+and ``skills/pead-screener/scripts/tests/test_pead_screener.py`` instead.
+"""
+
+from __future__ import annotations
+
+import copy
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from scripts import check_provider_contracts  # noqa: E402
+from scripts.fmp_client.registry import SKILLS  # noqa: E402
+from scripts.provider_contracts import (  # noqa: E402
+    ContractLoadError,
+    load_contracts,
+    redact_url,
+    validate_contract_file,
+    validate_rows,
+)
+
+CONTRACTS = load_contracts(REPO_ROOT)
+
+
+def _skill_ids() -> list[str]:
+    data = yaml.safe_load((REPO_ROOT / "skills-index.yaml").read_text(encoding="utf-8"))
+    return [s["id"] for s in data["skills"]]
+
+
+SKILL_IDS = _skill_ids()
+
+
+# ---------------------------------------------------------------------------
+# D1: every contract passes check; fixture has >=1 row; owners exist
+# ---------------------------------------------------------------------------
+
+
+def test_expected_contracts_are_present():
+    assert set(CONTRACTS) == {
+        "company-screener",
+        "sp500-constituent",
+        "profile",
+        "quote",
+        "historical-price-eod-full",
+        "earnings-calendar",
+        "economic-calendar",
+        "income-statement",
+        "ratios",
+    }
+
+
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_contract_file_is_valid(name):
+    contract = CONTRACTS[name]
+    errors = validate_contract_file(contract, SKILL_IDS)
+    assert errors == []
+
+
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_contract_fixture_has_at_least_one_row(name):
+    assert len(CONTRACTS[name].fixture) >= 1
+
+
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_contract_owners_exist_in_skills_index(name):
+    contract = CONTRACTS[name]
+    assert contract.owners
+    for owner in contract.owners:
+        assert owner in SKILL_IDS, owner
+
+
+def test_check_cli_passes_on_real_contracts():
+    assert check_provider_contracts.main(["check"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# D2: rename regression + missing/null/wrong-type/empty anomaly detection
+# ---------------------------------------------------------------------------
+
+
+def _contracts_with_legacy_aliases():
+    return [name for name, c in CONTRACTS.items() if c.legacy_aliases]
+
+
+def test_expected_legacy_alias_holders():
+    assert sorted(_contracts_with_legacy_aliases()) == ["company-screener", "profile"]
+
+
+@pytest.mark.parametrize(
+    "contract_name,legacy_key,canonical",
+    [
+        (name, k, v["canonical"])
+        for name in _contracts_with_legacy_aliases()
+        for k, v in CONTRACTS[name].legacy_aliases.items()
+        if v["canonical"] in CONTRACTS[name].required_fields
+    ],
+)
+def test_rename_canonical_to_legacy_is_a_fatal_anomaly(contract_name, legacy_key, canonical):
+    contract = CONTRACTS[contract_name]
+    row = copy.deepcopy(contract.fixture[0])
+    row[legacy_key] = row.pop(canonical)
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    codes = [a.code for a in result.fatal_anomalies]
+    assert f"canonical_absent_legacy_present:{legacy_key}->{canonical}" in codes
+
+
+def test_rename_optional_field_to_its_legacy_alias_is_not_flagged():
+    # lastDiv -> lastDividend: lastDividend is optional, not required, so a
+    # renamed-only row (no canonical_absent_legacy_present check applies to
+    # optional fields) produces no anomaly at all.
+    contract = CONTRACTS["profile"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["lastDiv"] = row.pop("lastDividend")
+    result = validate_rows(contract, [row])
+    assert result.ok is True
+
+
+def test_legacy_alias_present_alongside_canonical_is_a_deprecation_only():
+    contract = CONTRACTS["profile"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["mktCap"] = row["marketCap"]  # both present: informational, not fatal
+    result = validate_rows(contract, [row])
+    assert result.ok is True
+    codes = [a.code for a in result.deprecations]
+    assert "legacy_alias_present:mktCap" in codes
+
+
+def test_dropped_required_field_is_missing_required_field():
+    contract = CONTRACTS["quote"]
+    row = copy.deepcopy(contract.fixture[0])
+    del row["marketCap"]
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code == "missing_required_field:marketCap" for a in result.fatal_anomalies)
+
+
+def test_null_on_non_nullable_required_field_is_fatal():
+    contract = CONTRACTS["historical-price-eod-full"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["close"] = None
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code == "null_required_field:close" for a in result.fatal_anomalies)
+
+
+def test_null_on_nullable_required_field_is_not_fatal():
+    contract = CONTRACTS["earnings-calendar"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["epsActual"] = None
+    result = validate_rows(contract, [row])
+    assert result.ok is True
+
+
+def test_wrong_type_is_fatal():
+    contract = CONTRACTS["quote"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["volume"] = "not-a-number"
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code == "wrong_type:volume:str" for a in result.fatal_anomalies)
+
+
+def test_empty_list_is_fatal_empty_response():
+    contract = CONTRACTS["profile"]
+    assert contract.non_empty.get("min_rows", 0) >= 1
+    result = validate_rows(contract, [])
+    assert result.ok is False
+    assert any(a.code == "empty_response" for a in result.fatal_anomalies)
+
+
+def test_none_response_is_fatal_empty_response():
+    contract = CONTRACTS["profile"]
+    result = validate_rows(contract, None)
+    assert result.ok is False
+    assert any(a.code == "empty_response" for a in result.fatal_anomalies)
+
+
+def test_not_a_list_is_fatal():
+    contract = CONTRACTS["quote"]
+    result = validate_rows(contract, {"not": "a list"})
+    assert result.ok is False
+    assert any(a.code == "not_a_list" for a in result.fatal_anomalies)
+
+
+def test_row_not_object_is_fatal():
+    contract = CONTRACTS["quote"]
+    result = validate_rows(contract, ["not-a-dict"])
+    assert result.ok is False
+    assert any(a.code == "row_not_object" for a in result.fatal_anomalies)
+
+
+# ---------------------------------------------------------------------------
+# D2b: income-statement + ratios (Issue #332 slice) drift on the real fixtures
+# ---------------------------------------------------------------------------
+
+
+def test_income_statement_required_fields_are_present_in_fixture():
+    contract = CONTRACTS["income-statement"]
+    assert contract.non_empty.get("min_rows", 0) >= 1
+    for field in ("symbol", "date", "revenue"):
+        assert field in contract.required_fields
+        assert contract.required_fields[field]["nullable"] is False
+    result = validate_rows(contract, contract.fixture)
+    assert result.ok is True
+
+
+def test_income_statement_dropped_field_is_missing_required_field():
+    contract = CONTRACTS["income-statement"]
+    row = copy.deepcopy(contract.fixture[0])
+    del row["revenue"]
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code == "missing_required_field:revenue" for a in result.fatal_anomalies)
+
+
+def test_ratios_required_fields_are_present_in_fixture():
+    contract = CONTRACTS["ratios"]
+    assert contract.non_empty.get("min_rows", 0) >= 1
+    for field in ("symbol", "date", "priceToEarningsRatio", "priceToBookRatio"):
+        assert field in contract.required_fields
+    assert contract.required_fields["priceToEarningsRatio"].get("reject_all_null") is True
+    assert contract.required_fields["priceToBookRatio"].get("reject_all_null") is True
+    result = validate_rows(contract, contract.fixture)
+    assert result.ok is True
+
+
+def test_ratios_null_pe_pb_rows_are_all_null_required_field():
+    contract = CONTRACTS["ratios"]
+    rows = copy.deepcopy(contract.fixture)
+    for row in rows:
+        row["priceToEarningsRatio"] = None
+        row["priceToBookRatio"] = None
+    result = validate_rows(contract, rows)
+    assert result.ok is False
+    assert any(
+        a.code == "all_null_required_field:priceToEarningsRatio" for a in result.fatal_anomalies
+    )
+
+
+def test_ratios_wrong_type_is_fatal():
+    contract = CONTRACTS["ratios"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["priceToEarningsRatio"] = "not-a-number"
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code.startswith("wrong_type:priceToEarningsRatio") for a in result.fatal_anomalies)
+
+
+def test_ratios_empty_list_is_fatal_empty_response():
+    contract = CONTRACTS["ratios"]
+    assert contract.non_empty.get("min_rows", 0) >= 1
+    result = validate_rows(contract, [])
+    assert result.ok is False
+    assert any(a.code == "empty_response" for a in result.fatal_anomalies)
+
+
+# ---------------------------------------------------------------------------
+# D3: the ten generated fmp_client.py clients exercised on the real fixtures
+# ---------------------------------------------------------------------------
+
+
+def _load_client_module(rel_path: str):
+    abs_path = REPO_ROOT / rel_path
+    skill = abs_path.parent.parent.name.replace("-", "_")
+    name = f"_provider_contracts_{skill}"
+    sys.modules.pop(name, None)
+    sys.modules.pop("_fmp_compat", None)
+    sys.path.insert(0, str(abs_path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location(name, str(abs_path))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(abs_path.parent))
+
+
+HIST_FIXTURE = CONTRACTS["historical-price-eod-full"].fixture
+QUOTE_FIXTURE = CONTRACTS["quote"].fixture
+PROFILE_FIXTURE = CONTRACTS["profile"].fixture
+EARNINGS_FIXTURE = CONTRACTS["earnings-calendar"].fixture
+SCREENER_FIXTURE = CONTRACTS["company-screener"].fixture
+SP500_FIXTURE = CONTRACTS["sp500-constituent"].fixture
+INCOME_FIXTURE = CONTRACTS["income-statement"].fixture
+RATIOS_FIXTURE = CONTRACTS["ratios"].fixture
+ECONOMIC_FIXTURE = CONTRACTS["economic-calendar"].fixture
+
+
+def _assert_hist_row(row):
+    for f in ("date", "open", "high", "low", "close", "volume"):
+        assert f in row, f
+
+
+CORE_TEMPLATE_SKILLS = [
+    "pead-screener",
+    "earnings-trade-analyzer",
+    "ibd-distribution-day-monitor",
+    "vcp-screener",
+    "parabolic-short-trade-planner",
+    "ftd-detector",
+]
+
+
+@pytest.mark.parametrize("skill", CORE_TEMPLATE_SKILLS)
+def test_core_template_client_historical_prices_accepts_fixture(skill, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    config = SKILLS[skill]
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(HIST_FIXTURE))
+
+    data = client.get_historical_prices("AAPL", days=5)
+    if config.hist_return_list:
+        assert isinstance(data, list)
+        assert data
+        _assert_hist_row(data[0])
+    else:
+        assert isinstance(data, dict)
+        assert "historical" in data
+        assert data["historical"]
+        _assert_hist_row(data["historical"][0])
+
+
+QUOTE_CLIENTS = ["vcp-screener", "parabolic-short-trade-planner", "ftd-detector"]
+
+
+@pytest.mark.parametrize("skill", QUOTE_CLIENTS)
+def test_core_template_client_quote_accepts_fixture(skill, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    assert SKILLS[skill].has_quote
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(QUOTE_FIXTURE))
+
+    quotes = client.get_quote("AAPL")
+    assert isinstance(quotes, list)
+    assert quotes[0]["symbol"] == "AAPL"
+    assert "marketCap" in quotes[0]
+
+
+FAMILY_B_SKILLS = ["pead-screener", "earnings-trade-analyzer", "ibd-distribution-day-monitor"]
+
+
+@pytest.mark.parametrize("skill", FAMILY_B_SKILLS)
+def test_family_b_client_company_profiles_accepts_fixture(skill, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    assert SKILLS[skill].family == "B"
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(PROFILE_FIXTURE))
+
+    profiles = client.get_company_profiles(["AAPL"])
+    assert "AAPL" in profiles
+    assert "marketCap" in profiles["AAPL"]
+    assert "exchange" in profiles["AAPL"]
+
+
+@pytest.mark.parametrize("skill", FAMILY_B_SKILLS)
+def test_family_b_client_earnings_calendar_accepts_fixture(skill, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    monkeypatch.setattr(
+        client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(EARNINGS_FIXTURE)
+    )
+
+    rows = client.get_earnings_calendar("2026-09-04", "2026-09-04")
+    assert isinstance(rows, list) and rows
+    for row in rows:
+        for f in (
+            "symbol",
+            "date",
+            "epsActual",
+            "epsEstimated",
+            "revenueActual",
+            "revenueEstimated",
+        ):
+            assert f in row
+
+
+@pytest.mark.parametrize("skill", FAMILY_B_SKILLS)
+def test_family_b_client_earnings_calendar_requests_report_times(skill, monkeypatch):
+    """Issue #352: the client must ask for includeReportTimes=true (a string,
+    not a JSON boolean) so the provider includes the `time` (bmo/amc/null)
+    field on each row."""
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+
+    captured = {}
+
+    def fake_get(url, params=None, **kwargs):
+        captured["url"] = url
+        captured["params"] = params
+        return copy.deepcopy(EARNINGS_FIXTURE)
+
+    monkeypatch.setattr(client, "_rate_limited_get", fake_get)
+
+    client.get_earnings_calendar("2026-09-04", "2026-09-04")
+
+    assert captured["params"]["includeReportTimes"] == "true"
+
+
+def test_earnings_calendar_fixture_rows_carry_time_field():
+    """Issue #352: the recorded fixture must reflect includeReportTimes=true
+    responses (time present as bmo/amc/None), not the pre-#352 shape."""
+    for row in EARNINGS_FIXTURE:
+        assert "time" in row
+
+
+def test_earnings_calendar_fixture_covers_bmo_amc_and_null_timing():
+    times = {row.get("time") for row in EARNINGS_FIXTURE}
+    assert {"bmo", "amc", None} <= times
+
+
+def test_earnings_calendar_missing_time_field_is_a_fatal_regression():
+    """A response missing `time` entirely (e.g. includeReportTimes dropped
+    again) must be caught as missing_required_field, not silently accepted."""
+    contract = CONTRACTS["earnings-calendar"]
+    row = copy.deepcopy(contract.fixture[0])
+    del row["time"]
+    result = validate_rows(contract, [row])
+    assert result.ok is False
+    assert any(a.code == "missing_required_field:time" for a in result.fatal_anomalies)
+
+
+def test_contract_query_values_are_all_strings():
+    """check_provider_contracts.py sends `dict(contract.query)` straight into
+    requests' `params=`; a JSON boolean for includeReportTimes would be sent
+    as Python `True`, which the API rejects with HTTP 400 (only the strings
+    "true"/"false" are accepted). The same guard applies to every contract:
+    the canary runs offline-statically recorded string queries, never int/
+    bool fast paths."""
+    for name in sorted(CONTRACTS):
+        contract = CONTRACTS[name]
+        for key, value in contract.query.items():
+            assert isinstance(value, str), f"{name}: {key}={value!r} is not a str"
+
+
+# --- specials: canslim, macro, market-top, us-undervalued-growth-screener ---
+
+
+def test_canslim_special_historical_and_quote_and_profile_accept_fixture(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module("skills/canslim-screener/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(HIST_FIXTURE))
+    hist = client.get_historical_prices("AAPL", days=5)
+    assert isinstance(hist, dict) and "historical" in hist
+    _assert_hist_row(hist["historical"][0])
+
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(QUOTE_FIXTURE))
+    quote = client.get_quote("AAPL")
+    assert isinstance(quote, list) and quote[0]["symbol"] == "AAPL"
+
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(PROFILE_FIXTURE))
+    profile = client.get_profile("AAPL")
+    assert isinstance(profile, list)
+    # canslim keeps the documented mktCap alias shim for its own screener code.
+    assert profile[0]["mktCap"] == profile[0]["marketCap"]
+
+
+def test_macro_special_historical_accepts_fixture(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module("skills/macro-regime-detector/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(HIST_FIXTURE))
+
+    data = client.get_historical_prices("AAPL", days=5)
+    assert mod._has_usable_history(data)
+    _assert_hist_row(data["historical"][0])
+
+
+def test_market_top_special_historical_and_quote_accept_fixture(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module("skills/market-top-detector/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(HIST_FIXTURE))
+    hist = client.get_historical_prices("AAPL", days=5)
+    assert mod._has_usable_history(hist)
+    _assert_hist_row(hist["historical"][0])
+
+    monkeypatch.setattr(client, "_rate_limited_get", lambda *a, **k: copy.deepcopy(QUOTE_FIXTURE))
+    quote = client.get_quote("AAPL")
+    assert isinstance(quote, list) and quote[0]["symbol"] == "AAPL"
+
+
+def test_us_undervalued_growth_screener_historical_profile_quotes_accept_fixture(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module("skills/us-undervalued-growth-screener/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+
+    def fake_request_json(url, params=None, **kwargs):
+        if "historical-price-eod" in url:
+            return copy.deepcopy(HIST_FIXTURE)
+        if "profile" in url:
+            return copy.deepcopy(PROFILE_FIXTURE)
+        if "quote" in url:
+            return copy.deepcopy(QUOTE_FIXTURE)
+        return None
+
+    monkeypatch.setattr(client, "_request_json", fake_request_json)
+
+    hist = client.get_historical_prices("AAPL", from_date="2026-08-31", to_date="2026-09-04")
+    assert isinstance(hist, list) and hist
+    _assert_hist_row(hist[0])
+
+    profile = client.get_profile("AAPL")
+    assert isinstance(profile, dict)
+    assert "marketCap" in profile
+
+    quotes = client.get_quotes(["AAPL"])
+    assert "AAPL" in quotes
+    assert "marketCap" in quotes["AAPL"]
+
+
+def test_us_undervalued_growth_screener_company_screener_accepts_fixture(monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "test_key")  # pragma: allowlist secret
+    mod = _load_client_module("skills/us-undervalued-growth-screener/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="test_key")  # pragma: allowlist secret
+    captured: dict = {}
+
+    def fake_request_json(url, params=None, **kwargs):
+        captured["url"] = url
+        captured["params"] = dict(params or {})
+        if "company-screener" in url:
+            return copy.deepcopy(SCREENER_FIXTURE)
+        return None
+
+    monkeypatch.setattr(client, "_request_json", fake_request_json)
+
+    universe = client.get_company_screener(
+        exchange="NASDAQ",
+        min_market_cap=200_000_000_000,
+        max_market_cap=6_000_000_000_000,
+        min_price=1.0,
+        limit=10,
+    )
+
+    # The client routes the screener to /stable. Only the generated garp
+    # client pins the isEtf/isFund/isActivelyTrading filters server-side;
+    # the ad-hoc consumers filter on response-row fields client-side.
+    assert "company-screener" in captured["url"]
+    assert captured["params"]["exchange"] == "NASDAQ"
+    assert captured["params"]["marketCapMoreThan"] == 200_000_000_000
+    assert captured["params"]["marketCapLowerThan"] == 6_000_000_000_000
+    assert captured["params"]["isEtf"] == "false"
+    assert captured["params"]["isFund"] == "false"
+    assert captured["params"]["isActivelyTrading"] == "true"
+
+    assert isinstance(universe, list) and len(universe) == len(SCREENER_FIXTURE)
+    assert all(isinstance(row, dict) for row in universe)
+    for row in universe:
+        assert row["symbol"]
+        assert "marketCap" in row
+
+
+# ---------------------------------------------------------------------------
+# D5: `check` is network-free
+# ---------------------------------------------------------------------------
+
+
+def test_check_is_network_free(monkeypatch):
+    import socket
+
+    def _forbidden(*args, **kwargs):
+        raise AssertionError("network access attempted during `check`")
+
+    monkeypatch.setattr(socket, "socket", _forbidden)
+    assert check_provider_contracts.main(["check"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# D6: the CLI module imports with `requests` blocked
+# ---------------------------------------------------------------------------
+
+
+def test_module_imports_with_requests_blocked():
+    script = (
+        "import sys\n"
+        "sys.modules['requests'] = None\n"
+        f"sys.path.insert(0, {str(REPO_ROOT)!r})\n"
+        "import scripts.check_provider_contracts as m\n"
+        "import scripts.provider_contracts as p\n"
+        "print('IMPORT_OK')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "IMPORT_OK" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# D7: canary with an injectable stub fetch
+# ---------------------------------------------------------------------------
+
+
+def _stub_fetch_ok(path, query):
+    if path == "/stable/sp500-constituent":
+        return 200, copy.deepcopy(SP500_FIXTURE)
+    if "company-screener" in path:
+        return 200, copy.deepcopy(SCREENER_FIXTURE)
+    if "profile" in path:
+        return 200, copy.deepcopy(PROFILE_FIXTURE)
+    if "quote" in path:
+        return 200, copy.deepcopy(QUOTE_FIXTURE)
+    if "historical-price-eod" in path:
+        return 200, copy.deepcopy(HIST_FIXTURE)
+    if "earnings-calendar" in path:
+        return 200, copy.deepcopy(EARNINGS_FIXTURE)
+    if path == "/stable/economic-calendar":
+        return 200, copy.deepcopy(ECONOMIC_FIXTURE)
+    if "income-statement" in path:
+        return 200, copy.deepcopy(INCOME_FIXTURE)
+    if "ratios" in path:
+        return 200, copy.deepcopy(RATIOS_FIXTURE)
+    return 404, None
+
+
+def test_canary_success_writes_report_and_never_leaks_the_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "FAKEKEY123")
+    monkeypatch.setattr(
+        check_provider_contracts, "_build_requests_fetch", lambda api_key: _stub_fetch_ok
+    )
+
+    report_path = tmp_path / "canary_ok.json"
+    exit_code = check_provider_contracts.main(["canary", "--report", str(report_path)])
+
+    assert exit_code == 0
+    assert report_path.exists()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert set(report["contracts"]) == {
+        "company-screener",
+        "sp500-constituent",
+        "profile",
+        "quote",
+        "historical-price-eod-full",
+        "earnings-calendar",
+        "economic-calendar",
+        "income-statement",
+        "ratios",
+    }
+    for entry in report["contracts"].values():
+        assert entry["ok"] is True
+    assert report["ok"] is True
+    assert report["budget"] == {"max": len(CONTRACTS), "used": len(CONTRACTS)}
+    assert "FAKEKEY123" not in report_path.read_text(encoding="utf-8")
+
+
+def test_canary_detects_anomalies_and_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "FAKEKEY123")
+
+    def stub_fetch_broken_profile(path, query):
+        if "profile" in path:
+            bad = copy.deepcopy(PROFILE_FIXTURE[0])
+            bad["mktCap"] = bad.pop("marketCap")
+            return 200, [bad]
+        return _stub_fetch_ok(path, query)
+
+    monkeypatch.setattr(
+        check_provider_contracts, "_build_requests_fetch", lambda api_key: stub_fetch_broken_profile
+    )
+
+    report_path = tmp_path / "canary_bad.json"
+    exit_code = check_provider_contracts.main(["canary", "--report", str(report_path)])
+
+    assert exit_code == 1
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["contracts"]["profile"]["ok"] is False
+    codes = [a["code"] for a in report["contracts"]["profile"]["anomalies"]]
+    assert any(c.startswith("canonical_absent_legacy_present:mktCap->marketCap") for c in codes)
+    assert report["ok"] is False
+    assert report["budget"] == {"max": len(CONTRACTS), "used": len(CONTRACTS)}
+    assert "FAKEKEY123" not in report_path.read_text(encoding="utf-8")
+
+
+def test_canary_max_calls_budget_refuses_to_start(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FMP_API_KEY", "FAKEKEY123")
+    monkeypatch.setattr(
+        check_provider_contracts, "_build_requests_fetch", lambda api_key: _stub_fetch_ok
+    )
+
+    report_path = tmp_path / "should_not_exist.json"
+    exit_code = check_provider_contracts.main(
+        ["canary", "--max-calls", "2", "--report", str(report_path)]
+    )
+
+    assert exit_code == 1
+    assert not report_path.exists()
+    captured = capsys.readouterr()
+    assert "refusing to start" in captured.err
+    assert "FAKEKEY123" not in captured.err
+    assert "FAKEKEY123" not in captured.out
+
+
+def test_redact_url_strips_apikey():
+    url = "https://financialmodelingprep.com/stable/profile?symbol=AAPL&apikey=SECRET123"
+    redacted = redact_url(url)
+    assert "SECRET123" not in redacted
+    assert "apikey=REDACTED" in redacted
+
+
+def test_canary_default_max_calls_is_number_of_loaded_contracts(tmp_path, monkeypatch):
+    # No --max-calls given: the budget defaults to len(contracts), so probing
+    # exactly the loaded contracts must NOT refuse to start.
+    monkeypatch.setenv("FMP_API_KEY", "FAKEKEY123")
+    monkeypatch.setattr(
+        check_provider_contracts, "_build_requests_fetch", lambda api_key: _stub_fetch_ok
+    )
+    report_path = tmp_path / "default_budget.json"
+    exit_code = check_provider_contracts.main(["canary", "--report", str(report_path)])
+    assert exit_code == 0
+    assert report_path.exists()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["budget"] == {"max": len(CONTRACTS), "used": len(CONTRACTS)}
+
+
+def test_build_requests_fetch_redacts_apikey_from_exception_message(monkeypatch):
+    import requests
+
+    def fake_get(url, params=None, timeout=None):
+        raise requests.exceptions.ConnectionError(
+            f"Failed to establish a new connection: {url}?apikey=FAKEKEY123 unreachable"
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    fetch = check_provider_contracts._build_requests_fetch("FAKEKEY123")
+
+    status, payload = fetch("/stable/profile", {"symbol": "AAPL"})
+
+    assert status == -1
+    assert "FAKEKEY123" not in payload["error"]
+    assert "apikey=REDACTED" in payload["error"]
+
+
+# ---------------------------------------------------------------------------
+# D7 cont'd / item 7: malformed JSON and duplicate-endpoint contract loading
+# ---------------------------------------------------------------------------
+
+_MINIMAL_CONTRACT_PAYLOAD = {
+    "schema_version": 1,
+    "provider": "fmp",
+    "endpoint": "profile",
+    "path": "/stable/profile",
+    "query": {"symbol": "AAPL"},
+    "contract_version": 1,
+    "recorded_on": "2026-09-05",
+    "recording": "test fixture",
+    "owners": ["pead-screener"],
+    "tier_notes": "",
+    "required_fields": {},
+    "optional_fields": [],
+    "legacy_aliases": {},
+    "known_gaps": [],
+    "non_empty": {"min_rows": 0},
+    "fixture": [],
+}
+
+
+def test_load_contracts_raises_on_malformed_json(tmp_path):
+    provider_dir = tmp_path / "config" / "provider-contracts" / "fmp"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "broken.v1.json").write_text("{not valid json", encoding="utf-8")
+
+    with pytest.raises(ContractLoadError, match="malformed JSON"):
+        load_contracts(tmp_path)
+
+
+def test_load_contracts_raises_on_duplicate_endpoint(tmp_path):
+    provider_dir = tmp_path / "config" / "provider-contracts" / "fmp"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "profile.v1.json").write_text(
+        json.dumps(_MINIMAL_CONTRACT_PAYLOAD), encoding="utf-8"
+    )
+    (provider_dir / "profile.v2.json").write_text(
+        json.dumps(_MINIMAL_CONTRACT_PAYLOAD), encoding="utf-8"
+    )
+
+    with pytest.raises(ContractLoadError, match="duplicate endpoint 'profile'"):
+        load_contracts(tmp_path)
+
+
+def test_check_cli_reports_malformed_contract_cleanly_instead_of_a_traceback(
+    tmp_path, monkeypatch, capsys
+):
+    provider_dir = tmp_path / "config" / "provider-contracts" / "fmp"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "broken.v1.json").write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setattr(check_provider_contracts, "_REPO_ROOT", tmp_path)
+
+    exit_code = check_provider_contracts.main(["check"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert "malformed JSON" in captured.err
+
+
+@pytest.mark.parametrize("row_count", [1, 3])
+def test_profile_all_null_market_cap_is_fatal(row_count):
+    contract = CONTRACTS["profile"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["marketCap"] = None
+    result = validate_rows(contract, [copy.deepcopy(row) for _ in range(row_count)])
+    assert [a.code for a in result.fatal_anomalies] == ["all_null_required_field:marketCap"]
+    assert not result.ok
+
+
+@pytest.mark.parametrize("value", [0, 1, 123.5])
+def test_profile_mixed_null_and_populated_market_cap_is_allowed(value):
+    contract = CONTRACTS["profile"]
+    rows = [copy.deepcopy(contract.fixture[0]) for _ in range(2)]
+    rows[0]["marketCap"] = None
+    rows[1]["marketCap"] = value
+    assert validate_rows(contract, rows).ok
+
+
+@pytest.mark.parametrize("policy", [False, "absent"])
+def test_all_null_rejection_is_opt_in(policy):
+    contract = copy.deepcopy(CONTRACTS["profile"])
+    if policy == "absent":
+        contract.required_fields["marketCap"].pop("reject_all_null")
+    else:
+        contract.required_fields["marketCap"]["reject_all_null"] = policy
+    contract.fixture[0]["marketCap"] = None
+    assert validate_rows(contract, contract.fixture).ok
+
+
+def test_all_null_unreported_earnings_values_remain_allowed():
+    contract = CONTRACTS["earnings-calendar"]
+    rows = copy.deepcopy(contract.fixture)
+    for row in rows:
+        for name, spec in contract.required_fields.items():
+            if spec.get("nullable", False):
+                row[name] = None
+    assert validate_rows(contract, rows).ok
+
+
+@pytest.mark.parametrize(
+    "bad_row,expected",
+    [
+        ({}, "missing_required_field:marketCap"),
+        (None, "row_not_object"),
+        ({"marketCap": "null"}, "wrong_type:marketCap:str"),
+    ],
+)
+def test_all_null_rule_does_not_hide_other_response_defects(bad_row, expected):
+    contract = CONTRACTS["profile"]
+    row = copy.deepcopy(contract.fixture[0])
+    row["marketCap"] = None
+    result = validate_rows(contract, [row, bad_row])
+    codes = [a.code for a in result.fatal_anomalies]
+    assert expected in codes
+    assert "all_null_required_field:marketCap" not in codes
+    assert not result.ok
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true", "false", [], {}])
+@pytest.mark.parametrize("rows", [[], None, {}, "fixture"])
+def test_invalid_all_null_policy_fails_even_on_empty_response(value, rows):
+    contract = copy.deepcopy(CONTRACTS["profile"])
+    contract.required_fields["marketCap"]["reject_all_null"] = value
+    contract.non_empty["min_rows"] = 0
+    payload = contract.fixture if rows == "fixture" else rows
+    result = validate_rows(contract, payload)
+    assert not result.ok
+    assert "invalid_contract_rule:marketCap:reject_all_null" in [
+        a.code for a in result.fatal_anomalies
+    ]
+    assert any(
+        "invalid_contract_rule:marketCap:reject_all_null" in error
+        for error in validate_contract_file(contract, SKILL_IDS)
+    )
+
+
+def test_empty_response_retains_its_original_anomaly():
+    result = validate_rows(CONTRACTS["profile"], [])
+    assert [a.code for a in result.fatal_anomalies] == ["empty_response"]
+
+
+def test_offline_check_rejects_all_null_fixture(monkeypatch, capsys):
+    contracts = copy.deepcopy(CONTRACTS)
+    contracts["profile"].fixture[0]["marketCap"] = None
+    monkeypatch.setattr(check_provider_contracts, "load_contracts", lambda root: contracts)
+    assert check_provider_contracts.main(["check"]) == 1
+    assert "all_null_required_field:marketCap" in capsys.readouterr().err
+
+
+def test_canary_all_null_profile_reports_fatal_and_exits_one(tmp_path, monkeypatch):
+    monkeypatch.setenv("FMP_API_KEY", "FAKEKEY123")
+
+    def fetch(path, query):
+        status, rows = _stub_fetch_ok(path, query)
+        if path == "/stable/profile":
+            for row in rows:
+                row["marketCap"] = None
+        return status, rows
+
+    monkeypatch.setattr(check_provider_contracts, "_build_requests_fetch", lambda key: fetch)
+    report_path = tmp_path / "all_null.json"
+    assert check_provider_contracts.main(["canary", "--report", str(report_path)]) == 1
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["ok"] is False
+    assert report["contracts"]["profile"] == {
+        "status": 200,
+        "rows": len(PROFILE_FIXTURE),
+        "anomalies": [{"code": "all_null_required_field:marketCap", "severity": "fatal"}],
+        "deprecations": [],
+        "ok": False,
+    }
+    assert all(entry["ok"] for key, entry in report["contracts"].items() if key != "profile")
+    assert report["budget"] == {"max": len(CONTRACTS), "used": len(CONTRACTS)}
+
+
+# S&P 500 constituent contract and existing fallback boundary.
+@pytest.fixture
+def sp500_offline(monkeypatch):
+    import requests
+
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("unexpected HTTP request")
+
+    monkeypatch.setattr(requests.sessions.Session, "request", forbidden)
+
+
+@pytest.mark.parametrize("field", ["symbol", "name", "sector"])
+@pytest.mark.parametrize("mutation", ["missing", "null", "wrong_type"])
+def test_sp500_required_fields_detect_drift(field, mutation, sp500_offline):
+    rows = copy.deepcopy(SP500_FIXTURE)
+    if mutation == "missing":
+        del rows[0][field]
+        code = f"missing_required_field:{field}"
+    elif mutation == "null":
+        rows[0][field] = None
+        code = f"null_required_field:{field}"
+    else:
+        rows[0][field] = 123
+        code = f"wrong_type:{field}:int"
+    result = validate_rows(CONTRACTS["sp500-constituent"], rows)
+    assert not result.ok
+    assert code in [a.code for a in result.fatal_anomalies]
+
+
+@pytest.mark.parametrize("status", [402, 403, 429, 500, -1])
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_canary_rejects_http_failure_even_with_valid_rows(name, status, sp500_offline):
+    contract = CONTRACTS[name]
+    result = check_provider_contracts.run_canary(
+        {name: contract}, lambda path, query: (status, copy.deepcopy(contract.fixture))
+    )[name]
+    assert result["status"] == status
+    assert not result["ok"]
+    assert result["anomalies"] == [{"code": f"http_status:{status}", "severity": "fatal"}]
+
+
+def test_sp500_canary_empty_response_is_not_masked(sp500_offline):
+    result = check_provider_contracts.run_canary(
+        {"sp500-constituent": CONTRACTS["sp500-constituent"]}, lambda path, query: (200, [])
+    )["sp500-constituent"]
+    assert not result["ok"]
+    assert result["anomalies"] == [{"code": "empty_response", "severity": "fatal"}]
+
+
+@pytest.mark.parametrize("skill", ["vcp-screener", "parabolic-short-trade-planner"])
+def test_sp500_clients_accept_recording_and_cache(skill, monkeypatch, sp500_offline):
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="offline")
+    calls = []
+
+    def fetch(url, params):
+        calls.append((url, params))
+        return copy.deepcopy(SP500_FIXTURE)
+
+    monkeypatch.setattr(client, "_rate_limited_get", fetch)
+    rows = client.get_sp500_constituents()
+    assert rows == SP500_FIXTURE
+    assert validate_rows(CONTRACTS["sp500-constituent"], rows).ok
+    assert client.get_sp500_constituents() is rows
+    assert len(calls) == 1
+    assert calls[0][0] == "https://financialmodelingprep.com/stable/sp500-constituent"
+
+
+@pytest.mark.parametrize("skill", ["vcp-screener", "parabolic-short-trade-planner"])
+@pytest.mark.parametrize("status", [200, 402, 403])
+def test_sp500_clients_fallback_after_empty_or_denied_response(
+    skill, status, monkeypatch, sp500_offline
+):
+    from types import SimpleNamespace
+
+    mod = _load_client_module(f"skills/{skill}/scripts/fmp_client.py")
+    client = mod.FMPClient(api_key="offline")
+    monkeypatch.setattr(mod.time, "sleep", lambda seconds: None)
+    provider_calls = []
+    csv_calls = []
+
+    def provider_get(url, **kwargs):
+        provider_calls.append(url)
+        return SimpleNamespace(status_code=status, text="tier unavailable", json=lambda: [])
+
+    def csv_get(url, **kwargs):
+        csv_calls.append((url, kwargs))
+        return SimpleNamespace(
+            status_code=200,
+            text="Symbol,Security,GICS Sector,GICS Sub-Industry\n"
+            "BRK.B,Berkshire Hathaway,Financials,Multi-Sector Holdings\n",
+        )
+
+    monkeypatch.setattr(client.session, "get", provider_get)
+    monkeypatch.setattr(mod.requests, "get", csv_get)
+    rows = client.get_sp500_constituents()
+    assert rows == [
+        {
+            "symbol": "BRK-B",
+            "name": "Berkshire Hathaway",
+            "sector": "Financials",
+            "subSector": "Multi-Sector Holdings",
+        }
+    ]
+    assert client.get_sp500_constituents() is rows
+    assert len(provider_calls) == len(csv_calls) == 1
+    assert csv_calls[0] == (
+        "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv",
+        {"timeout": 30},
+    )
+
+
+def test_sp500_recording_reaches_parabolic_universe_resolver(sp500_offline):
+    # Isolate calculator imports from other skill modules in the repo test process.
+    code = """
+import argparse
+import importlib.util
+import json
+import sys
+import requests
+from pathlib import Path
+
+def forbidden(*args, **kwargs):
+    raise AssertionError('unexpected HTTP request')
+requests.sessions.Session.request = forbidden
+root = Path.cwd()
+spec = importlib.util.spec_from_file_location(
+    'sp500_screen', root / 'skills/parabolic-short-trade-planner/scripts/screen_parabolic.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+from fmp_client import FMPClient
+rows = json.loads(sys.stdin.read())
+client = FMPClient(api_key='offline')
+client._rate_limited_get = lambda *args, **kwargs: rows
+assert mod._resolve_universe(argparse.Namespace(universe='sp500'), client) == [
+    'VYLR', 'BE', 'ILMN', 'P', 'RDDT']
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        input=json.dumps(SP500_FIXTURE),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+# Economic-calendar (#332): the recorded contract must exercise its real consumer.
+
+
+def _economic_consumer():
+    from unittest.mock import patch
+
+    client_module = _load_client_module("skills/economic-calendar-fetcher/scripts/fmp_client.py")
+    with patch.dict(sys.modules, {"fmp_client": client_module}):
+        return _load_client_module(
+            "skills/economic-calendar-fetcher/scripts/get_economic_calendar.py"
+        )
+
+
+def test_economic_calendar_contract_matches_standalone_required_fields():
+    consumer = _economic_consumer()
+    contract = CONTRACTS["economic-calendar"]
+    assert set(contract.required_fields) == set(consumer.REQUIRED_TEXT_FIELDS) | set(
+        consumer.NULLABLE_NUMBER_FIELDS
+    )
+    for field in consumer.REQUIRED_TEXT_FIELDS:
+        assert contract.required_fields[field] == {"types": ["str"], "nullable": False}
+    for field in consumer.NULLABLE_NUMBER_FIELDS:
+        assert contract.required_fields[field] == {"types": ["int", "float"], "nullable": True}
+
+
+def test_economic_calendar_recording_reaches_consumer(monkeypatch):
+    consumer = _economic_consumer()
+    calls = []
+
+    def fake(self, url, params=None, quiet=False):
+        calls.append((url, params))
+        return copy.deepcopy(ECONOMIC_FIXTURE)
+
+    monkeypatch.setattr(consumer.FMPClient, "_rate_limited_get", fake)
+    rows = consumer.fetch_economic_calendar("2026-10-01", "2026-10-07", "test-key")
+    assert rows == ECONOMIC_FIXTURE
+    assert calls == [
+        (
+            "https://financialmodelingprep.com/stable/economic-calendar",
+            CONTRACTS["economic-calendar"].query,
+        )
+    ]
+    assert "None" in {r["impact"] for r in rows}  # provider's string, not JSON null
+
+
+@pytest.mark.parametrize("field", sorted(CONTRACTS["economic-calendar"].required_fields))
+def test_economic_calendar_renamed_fields_fail_contract_and_consumer(monkeypatch, field):
+    consumer = _economic_consumer()
+    row = copy.deepcopy(ECONOMIC_FIXTURE[0])
+    row["renamed_" + field] = row.pop(field)
+    assert not validate_rows(CONTRACTS["economic-calendar"], [row]).ok
+    monkeypatch.setattr(consumer.FMPClient, "_rate_limited_get", lambda *a, **k: [row])
+    with pytest.raises(consumer.EconomicCalendarSchemaError):
+        consumer.fetch_economic_calendar("2026-10-01", "2026-10-07", "test-key")
+
+
+@pytest.mark.parametrize("field", sorted(CONTRACTS["economic-calendar"].required_fields))
+def test_economic_calendar_retyped_fields_fail_contract_and_consumer(monkeypatch, field):
+    consumer = _economic_consumer()
+    row = copy.deepcopy(ECONOMIC_FIXTURE[0])
+    row[field] = {"wrong": "type"}
+    assert not validate_rows(CONTRACTS["economic-calendar"], [row]).ok
+    monkeypatch.setattr(consumer.FMPClient, "_rate_limited_get", lambda *a, **k: [row])
+    with pytest.raises(consumer.EconomicCalendarSchemaError):
+        consumer.fetch_economic_calendar("2026-10-01", "2026-10-07", "test-key")
+
+
+def test_economic_calendar_all_null_readings_are_valid():
+    consumer = _economic_consumer()
+    rows = copy.deepcopy(ECONOMIC_FIXTURE)
+    for row in rows:
+        for field in consumer.NULLABLE_NUMBER_FIELDS:
+            row[field] = None
+    assert validate_rows(CONTRACTS["economic-calendar"], rows).ok
+    consumer.validate_economic_events(rows)
+
+
+def test_economic_calendar_canary_flags_known_populated_window_empty():
+    from scripts.check_provider_contracts import run_canary
+
+    contract = CONTRACTS["economic-calendar"]
+    result = run_canary({"economic-calendar": contract}, lambda path, query: (200, []))
+    assert not result["economic-calendar"]["ok"]
+    assert any(a["code"] == "empty_response" for a in result["economic-calendar"]["anomalies"])

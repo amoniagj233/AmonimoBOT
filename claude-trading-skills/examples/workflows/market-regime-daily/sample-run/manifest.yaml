@@ -1,0 +1,42 @@
+workflow_id: market-regime-daily
+sample_type: required-only
+status: completed
+completed_steps:
+- 1
+- 2
+- 4
+required_steps_not_executed: []
+illustrative: true
+generated_by: scripts/workflow_replay.py generate
+prompt: prompt.md
+network_policy: offline-input-required
+optional_steps_skipped:
+- step: 3
+  skill: market-top-detector
+  reason: required-only executable replay
+artifacts:
+- step: 1
+  artifact_id: market_breadth_report
+  skill: market-breadth-analyzer
+  execution_mode: native_api
+  files:
+    canonical: 01_market_breadth_report.json
+- step: 2
+  artifact_id: uptrend_report
+  skill: uptrend-analyzer
+  execution_mode: native_api
+  files:
+    canonical: 02_uptrend_report.json
+- step: 4
+  artifact_id: exposure_decision
+  skill: exposure-coach
+  execution_mode: native_cli
+  files:
+    canonical: 04_exposure_decision.json
+execution_evidence_limitations:
+- Breadth, uptrend, and top-risk provider fetches are not executed.
+- Individual component calculators and live API failure paths are not executed.
+- Native scorer and JSON report APIs consume complete fictional component fixtures.
+- INSUFFICIENT_EVIDENCE is not a literal contract for these skills; unavailable fixture
+  components fail closed before publication.
+- Exposure Coach runs as the native CLI against the generated artifact handoffs.

@@ -1,0 +1,57 @@
+{
+  "blocking_reasons": [],
+  "decision": "DEPLOY",
+  "dimensions": [
+    {
+      "max_score": 20,
+      "name": "Sample Size",
+      "score": 13
+    },
+    {
+      "max_score": 20,
+      "name": "Expectancy",
+      "score": 20
+    },
+    {
+      "max_score": 20,
+      "name": "Risk Management",
+      "score": 20
+    },
+    {
+      "max_score": 20,
+      "name": "Robustness",
+      "score": 12
+    },
+    {
+      "max_score": 20,
+      "name": "Execution Realism",
+      "score": 20
+    }
+  ],
+  "expectancy": 5.906,
+  "inputs": {
+    "avg_loss_pct": 6.1,
+    "avg_win_pct": 14.6,
+    "max_acceptable_drawdown_pct": 50,
+    "max_drawdown_pct": 18.0,
+    "num_parameters": 4,
+    "slippage_tested": true,
+    "total_trades": 87,
+    "win_rate": 58.0,
+    "years_tested": 6
+  },
+  "profit_factor": 3.3052302888368463,
+  "profit_factor_status": "FINITE",
+  "provenance": {
+    "adapter_bound_source_sha256": {
+      "postmortem_source_sha256": "3272ce966dcbad845619cfbbf53afd3e616286b00d2bf785544862a84e9c7c18"
+    },
+    "execution": "native_cli_evaluated_fixture_metrics",
+    "limitation": "The native CLI evaluated supplied aggregate metrics; it did not run a strategy backtest or consume the postmortem.",
+    "metrics_source": "bundled fictional aggregate metrics"
+  },
+  "quality_score": 85,
+  "red_flags": [],
+  "total_score": 85,
+  "verdict": "Deploy"
+}

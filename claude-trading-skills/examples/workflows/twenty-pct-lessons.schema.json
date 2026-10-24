@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/claude-trading-skills/twenty-pct-lessons.schema.json",
+  "title": "Stockbee 20 percent study manual lessons replay contract",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["twenty_pct_cohort_summary", "edge_hints_yaml"],
+      "properties": {
+        "twenty_pct_cohort_summary": {"$ref": "#/$defs/sha256"},
+        "edge_hints_yaml": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "lesson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lesson_id", "decision", "observation", "changes_trading_rules"],
+      "properties": {
+        "lesson_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "decision": {
+          "enum": ["accepted_operating_rule", "journal_only", "rejected"]
+        },
+        "observation": {"type": "string", "minLength": 1},
+        "changes_trading_rules": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["decision"],
+            "properties": {
+              "decision": {"enum": ["journal_only", "rejected"]}
+            }
+          },
+          "then": {
+            "properties": {
+              "changes_trading_rules": {"const": false}
+            }
+          }
+        }
+      ]
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human_approved", "source_artifacts", "source_sha256", "lessons"],
+      "properties": {
+        "human_approved": {"const": true},
+        "source_artifacts": {
+          "const": ["twenty_pct_cohort_summary", "edge_hints_yaml"]
+        },
+        "source_sha256": {"$ref": "#/$defs/source_hashes"},
+        "lessons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/lesson"}
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "workflow_id",
+        "recorded_at",
+        "source_artifacts",
+        "lessons",
+        "provenance"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "workflow_id": {"const": "stockbee-20pct-study-daily"},
+        "recorded_at": {"type": "string", "format": "date-time"},
+        "source_artifacts": {
+          "const": ["twenty_pct_cohort_summary", "edge_hints_yaml"]
+        },
+        "lessons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/lesson"}
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "execution_mode",
+            "native_trader_memory_validated",
+            "source_sha256",
+            "note"
+          ],
+          "properties": {
+            "execution_mode": {"const": "manual_contract"},
+            "native_trader_memory_validated": {"const": false},
+            "source_sha256": {"$ref": "#/$defs/source_hashes"},
+            "note": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}

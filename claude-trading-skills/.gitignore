@@ -1,0 +1,60 @@
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Python cache & build artifacts
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.venv-smoke-*/
+
+# Tool configurations
+.idea/
+.vscode/
+.claude/
+.envrc
+.mcp.json
+
+# Local provider/API caches. Never commit credentials or raw provider payloads.
+.cache/
+
+# Logs & temp
+logs/
+*.log
+*.tmp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated reports
+reports/
+reviews/
+
+# Stray screener reports if a script is run with --output-dir . (default is reports/)
+canslim_screener_*.json
+canslim_screener_*.md
+
+# Per-symbol runtime state (e.g. parabolic-short SSR carryover files).
+# Kept out of commits so production state never leaks into the repo.
+state/
+
+# Local work-in-progress staging (patch bundles, nested skill drafts, ad-hoc
+# fetch scripts). Never place these under skills/ — an untracked path there
+# blocks the automated skill loops, whose git safety check aborts on any
+# untracked file. See docs/dev/maintenance-runbook.md.
+.staging/
+scripts/weekly_portfolio_review_fetch.py
+
+# CI artifacts
+htmlcov/
+.coverage
+/_site/
+# .secrets.baseline is tracked — needed by detect-secrets pre-commit hook

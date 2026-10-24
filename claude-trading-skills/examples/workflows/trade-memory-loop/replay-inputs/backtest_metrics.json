@@ -1,0 +1,10 @@
+{
+  "total_trades": 87,
+  "win_rate": 58.0,
+  "avg_win_pct": 14.6,
+  "avg_loss_pct": 6.1,
+  "max_drawdown_pct": 18.0,
+  "years_tested": 6,
+  "num_parameters": 4,
+  "slippage_tested": true
+}

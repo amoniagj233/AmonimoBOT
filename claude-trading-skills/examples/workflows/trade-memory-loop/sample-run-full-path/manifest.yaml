@@ -1,0 +1,69 @@
+workflow_id: trade-memory-loop
+sample_type: full-path
+status: completed
+completed_steps:
+- 1
+- 2
+- 3
+- 4
+- 5
+required_steps_not_executed: []
+illustrative: true
+generated_by: scripts/workflow_replay.py generate
+prompt: prompt.md
+network_policy: offline-input-required
+optional_steps_skipped: []
+artifacts:
+- step: 1
+  artifact_id: closed_thesis_record
+  skill: trader-memory-core
+  execution_mode: native_cli
+  files:
+    canonical: 01_closed_thesis_record.yaml
+- step: 2
+  artifact_id: postmortem_findings
+  skill: signal-postmortem
+  execution_mode: composite
+  files:
+    canonical: 02_postmortem_findings.json
+  executor_components:
+  - native_api
+  - manual_contract
+- step: 3
+  artifact_id: next_session_operating_rules
+  skill: trade-performance-coach
+  execution_mode: composite
+  files:
+    canonical: 03_next_session_operating_rules.yaml
+  executor_components: &id001
+  - native_cli
+  - manual_contract
+- step: 3
+  artifact_id: performance_coach_report
+  skill: trade-performance-coach
+  execution_mode: composite
+  files:
+    canonical: 03_performance_coach_report.json
+  executor_components: *id001
+- step: 4
+  artifact_id: backtest_validation
+  skill: backtest-expert
+  execution_mode: native_cli
+  files:
+    canonical: 04_backtest_validation.json
+- step: 5
+  artifact_id: lessons_log_entry
+  skill: trader-memory-core
+  execution_mode: composite
+  files:
+    canonical: 05_lessons_log_entry.md
+    state: 05_closed_thesis_with_lessons.yaml
+    provenance: 05_lessons_provenance.yaml
+  executor_components:
+  - native_api
+  - manual_contract
+execution_evidence_limitations:
+- Root-cause and lesson decisions are human-approved fixtures bound by SHA-256.
+- Backtest Expert evaluates bundled aggregate metrics; it does not run a strategy
+  backtest.
+- Only staged temporary trader-memory state is mutated; no user state is accessed.

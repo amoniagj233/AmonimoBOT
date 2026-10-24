@@ -1,0 +1,504 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Ruff check
+        run: ruff check skills/ scripts/
+
+      - name: Ruff format check
+        run: ruff format --check skills/ scripts/
+
+      # Use pyproject.toml config for skip/ignore-words-list
+      - name: Codespell
+        run: codespell --toml pyproject.toml skills/ scripts/
+
+  docs-cli-examples:
+    name: Documented CLI examples (issue #336)
+    runs-on: ubuntu-latest
+    # The gate is stdlib-only and offline, but the job still uses the project's
+    # locked environment for consistency with every other project job.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Validate bundled skill resource references
+        run: python3 scripts/check_skill_references.py
+
+      - name: Validate documented CLI examples
+        run: python3 scripts/check_doc_cli_examples.py validate
+
+      # Execute only examples explicitly marked `offline ci`; each runs in an
+      # isolated temp cwd and API-key env vars are stripped. Fails on any
+      # marked example that errors or mutates the repo.
+      - name: Execute offline CI examples
+        run: python3 scripts/check_doc_cli_examples.py execute --ci
+
+  discover-tests:
+    name: Discover test matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.10
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Discover and validate test coverage
+        id: discover
+        run: echo "matrix=$(python3 scripts/ci_test_matrix.py matrix)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test (${{ matrix.id }})
+    needs: discover-tests
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allowed_failure }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.10
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Verify locked policy dependencies
+        run: python scripts/ci_test_matrix.py install --check "${{ matrix.id }}"
+      - name: Run isolated tests
+        run: >
+          python scripts/ci_test_matrix.py run "${{ matrix.id }}"
+          --coverage-dir coverage-data
+      - name: Upload coverage row
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.id }}
+          path: coverage-data/
+          if-no-files-found: error
+          retention-days: 1
+
+  coverage:
+    name: Coverage
+    needs: [discover-tests, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.10
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Download coverage rows
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts
+      - name: Validate and combine coverage
+        run: >
+          python scripts/ci_test_matrix.py aggregate
+          --artifacts coverage-artifacts
+          --output combined-coverage
+      - name: Upload executable-code coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: executable-code-coverage-report
+          path: combined-coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  metadata:
+    name: Metadata + Workflow checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      # 1. Validate skills-index.yaml structure + bijection with skills/.
+      # Default mode is what pre-commit runs on each commit.
+      - name: Validate skills-index (default)
+        run: python3 scripts/validate_skills_index.py
+
+      # 2. Strict workflow validation — workflow files exist, schema rules
+      # pass (artifact parity, required_skills coverage, decision-gate
+      # questions, no deprecated skills in required_skills, etc.).
+      # This is what pre-push enforces locally.
+      - name: Validate skills-index (--strict-workflows)
+        run: python3 scripts/validate_skills_index.py --strict-workflows
+
+      # 2b. Strict metadata validation — every skill has populated
+      # timeframe / difficulty / inputs / outputs (no `unknown` markers,
+      # no empty lists). Now safe to enforce because the corresponding
+      # fill-in PR populated these fields for all 54 skills.
+      - name: Validate skills-index (--strict-metadata)
+        run: python3 scripts/validate_skills_index.py --strict-metadata
+
+      # 2c. Skillset manifest validation — full-field completeness +
+      # related_workflows coherence (SK001-SK013). Always strict.
+      - name: Validate skillsets
+        run: python3 scripts/validate_skillsets.py
+
+      # 3b. Drift check: docs/{en,ja}/skillsets.md must match what the
+      # generator would produce from skillsets/*.yaml. Catches manual edits
+      # to the docs and stale docs after manifest changes.
+      - name: Skillset docs drift check
+        run: python3 scripts/generate_skillset_docs.py --check
+
+      # 3a. Skill docs drift check: generator-owned pages (frontmatter
+      # `generated: true`) must match generator output, and every skill must
+      # have EN+JA pages. Hand-maintained pages (generated:false/absent or
+      # HAND_WRITTEN) are existence/marker-checked only — never content-
+      # compared, never reverted.
+      - name: Skill docs drift check
+        run: python3 scripts/generate_skill_docs.py --check
+
+      # 3. Drift check: docs/{en,ja}/workflows.md must match what the
+      # generator would produce from workflows/*.yaml. Catches manual edits
+      # to the docs and stale docs after manifest changes.
+      - name: Workflow docs drift check
+        run: python3 scripts/generate_workflow_docs.py --check
+
+      # 4. README catalog drift check: the catalog sections in README.md and
+      # README.ja.md (between skills-index sentinel markers) must match what
+      # the generator would produce from skills-index.yaml.
+      - name: README catalog drift check
+        run: python3 scripts/generate_catalog_from_index.py --check
+
+      # 4b. Quality dashboard drift check: docs/{en,ja}/quality-dashboard.md
+      # must match what the generator would produce from the deterministic
+      # SSoT inputs + committed runtime snapshot. Catches manual edits to the
+      # pages and stale pages after an SSoT input changes.
+      - name: Quality dashboard drift check
+        run: python3 scripts/generate_quality_dashboard.py --check
+
+      # 5. Navigator snapshot drift check: the bundled
+      # skills/trading-skills-navigator/assets/metadata_snapshot.json (the
+      # Claude Web App fallback) must match what build_snapshot.py would
+      # produce from skills-index.yaml + workflows/*.yaml.
+      - name: Navigator snapshot drift check
+        run: python3 skills/trading-skills-navigator/scripts/build_snapshot.py --check
+
+      - name: FMP client drift check
+        run: python3 scripts/generate_fmp_client.py --check
+
+      # 5b. Provider response contract check (Issue #332): validates
+      # config/provider-contracts/fmp/*.v*.json structure + fixtures against
+      # the generated fmp_client.py owners in skills-index.yaml. Offline —
+      # the orchestration environment is installed from uv.lock.
+      - name: Provider contract check
+        run: python3 scripts/check_provider_contracts.py check
+
+      - name: Shared market calendar drift check
+        run: python3 scripts/generate_market_calendar.py --check
+
+      - name: Packaged skill drift check
+        run: python3 scripts/check_package_drift_for_changed_skills.py
+
+      - name: FMP skill package drift check
+        run: python3 scripts/package_skills.py --check --skill pead-screener --skill earnings-trade-analyzer --skill ibd-distribution-day-monitor --skill vcp-screener --skill parabolic-short-trade-planner --skill ftd-detector --skill canslim-screener --skill macro-regime-detector --skill market-top-detector --skill us-undervalued-growth-screener --skill earnings-calendar --skill economic-calendar-fetcher --skill institutional-flow-tracker --skill cot-contrarian-detector --skill value-dividend-screener --skill dividend-growth-pullback-screener --skill kanchi-dividend-sop
+
+      # 5b. Dependency declaration check (offline, issue #330): every
+      # executable skill must ship requirements.txt covering its imports.
+      - name: Skill dependency declaration check
+        run: python3 scripts/check_skill_deps.py check
+
+      # 5c. Packaged dependency smoke (offline, issue #330): the committed
+      # .skill carries byte-identical requirements.txt and compilable scripts.
+      - name: Packaged dependency smoke
+        run: python3 scripts/check_skill_deps.py smoke --skill macro-regime-detector
+
+      # 5d. Compat matrix drift check: the job→(os, python) mapping in
+      # docs/dev/compatibility-matrix.md must match the compatibility jobs in
+      # ci.yml + compat-nightly.yml, and every job must stay inside the
+      # supported OS set / Python range.
+      - name: Compat matrix drift check
+        run: python3 scripts/check_compat_matrix.py
+
+      # Note: the validator + generator unit tests already run under the
+      # 'Test repo-level scripts' step in the test job above.
+
+  workflow-replay:
+    name: Workflow replay (Coverage 12/12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Replay covered workflows and check generated examples
+        run: >
+          python3 scripts/workflow_replay.py check
+          --report workflow-replay-report.json
+
+      - name: Upload workflow replay evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workflow-replay-report
+          path: workflow-replay-report.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  market-calendar-compat:
+    name: Market calendar (Python 3.9 clean room)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.9
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.9"
+      # Intentionally unlocked: isolated standalone requirements compatibility probe.
+      - name: Verify each standalone consumer in an isolated environment
+        run: |
+          while IFS= read -r skill
+          do
+            env_dir="${RUNNER_TEMP}/market-calendar-${skill}"
+            python3 -m venv "${env_dir}"
+            "${env_dir}/bin/pip" install -r "skills/${skill}/requirements.txt"
+            "${env_dir}/bin/python" scripts/smoke_market_calendar.py --skill "${skill}"
+          done < scripts/market_calendar/consumers.txt
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Bandit SAST scan
+        run: bandit -c pyproject.toml -r skills/ --exclude "*/tests/*"
+
+      # Compare a fresh scan against committed baseline (results only, ignore metadata)
+      - name: Detect secrets check
+        run: |
+          detect-secrets scan \
+            --exclude-files '\.env$|\.json$|\.csv$|\.md$|\.zip$|\.baseline$' \
+            > /tmp/new_scan.json
+          python3 -c "
+          import json, sys
+          with open('.secrets.baseline') as f: old = json.load(f)
+          with open('/tmp/new_scan.json') as f: new = json.load(f)
+          old_set = {(p, i['hashed_secret'], i['line_number'])
+                     for p, items in old.get('results', {}).items() for i in items}
+          new_set = {(p, i['hashed_secret'], i['line_number'])
+                     for p, items in new.get('results', {}).items() for i in items}
+          diff = new_set - old_set
+          if diff:
+              print(f'ERROR: {len(diff)} new secret(s) not in baseline:')
+              for p, h, ln in sorted(diff):
+                  print(f'  {p}:{ln}')
+              sys.exit(1)
+          print(f'OK: {len(new_set)} known, 0 new')
+          "
+
+  supply-chain:
+    name: Supply chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Sync locked project environment
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Check supply-chain policy
+        run: python scripts/check_supply_chain.py check
+      - name: Audit all locked dependencies
+        run: python scripts/check_supply_chain.py audit --report supply-chain-audit.json
+      - name: Upload dependency audit report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supply-chain-audit
+          path: supply-chain-audit.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+          license-check: false
+
+  # Compatibility smoke (issue #333): exercise the compatibility-sensitive
+  # suites on all three OS families at the max supported Python. This is the
+  # "supported = CI-enforced" leg that catches Windows/macOS regressions
+  # (#64) and standalone dependency gaps (#311) on every PR.
+  # Keep this bounded to the 3 OS axes; the heavy per-skill matrix stays on
+  # the primary Linux axis (test job).
+  compat-smoke:
+    name: Compat smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+
+      # Windows puts the venv on PATH via Scripts; POSIX via bin. The
+      # conditional keeps the literal ".venv/bin" substring so the
+      # supply-chain wiring test stays valid on every OS.
+      - name: Sync locked project environment
+        shell: bash
+        run: |
+          uv sync --locked --no-install-project --extra dev --extra ci
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "$PWD/.venv/Scripts" >> "$GITHUB_PATH"
+          else
+            echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install and run core risk/state/navigator suites
+        shell: bash
+        run: |
+          for id in position-sizer futures-position-sizer trader-memory-core drawdown-circuit-breaker trading-skills-navigator
+          do
+            python scripts/ci_test_matrix.py install --check "$id"
+            python scripts/ci_test_matrix.py run "$id"
+          done
+
+      - name: Isolated packaged-dependency import (#311)
+        shell: bash
+        # The explicit module inventory avoids executing every scripts/*.py;
+        # the checker still provisions only each skill's declared dependencies.
+        run: python scripts/check_isolated_skill_imports.py
+
+      - name: Run cross-platform regression tests
+        shell: bash
+        run: python -m pytest scripts/tests/test_compat_regressions.py

@@ -1,0 +1,164 @@
+{
+  "manual_root_cause": {
+    "classification": "thesis_quality",
+    "human_approved": true,
+    "summary": "The fictional outcome aligned with the written thesis; this human fixture makes no causal inference."
+  },
+  "native_postmortem": {
+    "entry_price": 142.1,
+    "exit_date": "2026-02-27",
+    "exit_price": 168.4,
+    "holding_days": 50,
+    "outcome_category": "TRUE_POSITIVE",
+    "outcome_notes": "",
+    "postmortem_id": "pm_th_exmpl_growth_20260108_a1b2",
+    "predicted_direction": "LONG",
+    "realized_returns": {
+      "20d": 0.083,
+      "5d": 0.021
+    },
+    "recorded_at": "2026-02-27T16:30:00+00:00",
+    "regime_at_exit": "RISK_ON",
+    "regime_at_signal": "RISK_ON",
+    "schema_version": "1.0",
+    "signal_date": "2026-01-08",
+    "signal_id": "th_exmpl_growth_20260108_a1b2",
+    "source_skill": "vcp-screener",
+    "ticker": "EXMPL"
+  },
+  "provenance": {
+    "components": [
+      "native_api",
+      "manual_contract"
+    ],
+    "execution_mode": "composite",
+    "limitation": "Root cause is a human-approved fixture decision, not native inference.",
+    "native_classification_basis": "fixture_supplied_realized_returns",
+    "native_component": "signal-postmortem.create_postmortem_record",
+    "source_sha256": {
+      "closed_thesis_record": "4120fc6de53b67d5d6884c794ce1dd45273e709556a383c29d983d15bc712c3a",
+      "native_postmortem_record": "902e12a164ac173f0b2da25524bdfdca17c956dc409fe1d5075e00ee8c9f5feb",
+      "realized_returns": "668e90078c21e633f4513935f771dc96038b37d0a709638145f3ef7eb3a9c51e"
+    },
+    "source_snapshot_sha256": {
+      "closed_thesis_record": "379229823d79e99ab60188cbb1849c16d2ab6cd8398edcf508387c7fd2b3b84b"
+    }
+  },
+  "schema_version": 1,
+  "source_snapshot": {
+    "closed_thesis_record": {
+      "catalyst": "Fictional Q4 earnings beat plus a multi-week VCP base breakout",
+      "confidence": "medium",
+      "confidence_score": 0.6,
+      "created_at": "2026-01-05T13:00:00+00:00",
+      "entry": {
+        "actual_date": "2026-01-08T14:35:00+00:00",
+        "actual_price": 142.1,
+        "conditions": [
+          "Break and hold above the fictional 142.50 pivot"
+        ],
+        "target_price": 142.5
+      },
+      "evidence": [
+        "Fictional VCP base with three contractions",
+        "Fictional relative-strength line at a new high"
+      ],
+      "exit": {
+        "actual_date": "2026-02-27T15:50:00+00:00",
+        "actual_price": 168.4,
+        "exit_reason": "target_hit",
+        "stop_loss": 134.5,
+        "stop_loss_pct": -5.35,
+        "take_profit": 157.3,
+        "take_profit_rr": 2.0,
+        "time_stop_days": 60
+      },
+      "kill_criteria": [
+        "Close below the 134.50 stop"
+      ],
+      "linked_reports": [],
+      "market_context": {
+        "breadth_score": 66,
+        "regime": "RISK_ON",
+        "sector": "Technology",
+        "top_detector_score": null
+      },
+      "mechanism_tag": "structure",
+      "monitoring": {
+        "alerts": [],
+        "last_review_date": null,
+        "next_review_date": "2026-02-07",
+        "review_interval_days": 30,
+        "review_status": "OK",
+        "triggers_config": []
+      },
+      "origin": {
+        "output_file": "fictional-vcp-screen.json",
+        "raw_provenance": {},
+        "screening_grade": "A",
+        "screening_score": 88,
+        "skill": "vcp-screener"
+      },
+      "origin_fingerprint": null,
+      "outcome": {
+        "holding_days": 50,
+        "lessons_learned": null,
+        "mae_mfe_source": null,
+        "mae_pct": null,
+        "mfe_pct": null,
+        "pnl_dollars": 1841.0,
+        "pnl_pct": 18.51
+      },
+      "position": {
+        "account_type": "margin",
+        "position_value": 9947.0,
+        "raw_source": {
+          "fields": {
+            "account_size": 100000,
+            "risk_pct": 1.0
+          },
+          "file": "fictional-position-sizer.json",
+          "skill": "position-sizer"
+        },
+        "risk_dollars": 532.0,
+        "risk_pct_of_account": 0.53,
+        "shares": 70,
+        "shares_remaining": 0,
+        "sizing_method": "fixed_risk_1pct"
+      },
+      "setup_type": "vcp_breakout",
+      "status": "CLOSED",
+      "status_history": [
+        {
+          "at": "2026-01-05T13:00:00+00:00",
+          "reason": "Surfaced by a fictional vcp-screener fixture",
+          "status": "IDEA"
+        },
+        {
+          "at": "2026-01-07T18:00:00+00:00",
+          "reason": "Fictional weekly base passed manual review",
+          "status": "ENTRY_READY"
+        },
+        {
+          "at": "2026-01-08T14:35:00+00:00",
+          "reason": "Fictional pivot cleared on volume",
+          "status": "ACTIVE"
+        },
+        {
+          "at": "2026-02-27T15:50:00+00:00",
+          "price": 168.4,
+          "proceeds": 11788.0,
+          "realized_pnl": 1841.0,
+          "reason": "closed: target_hit",
+          "shares_sold": 70,
+          "status": "CLOSED"
+        }
+      ],
+      "thesis_id": "th_exmpl_growth_20260108_a1b2",
+      "thesis_statement": "Fictional EXMPL completed a tight VCP base after a fictional earnings beat; a breakout through 142.50 may resolve into a momentum advance.",
+      "thesis_type": "growth_momentum",
+      "ticker": "EXMPL",
+      "updated_at": "2026-02-27T16:30:00+00:00"
+    }
+  }
+}

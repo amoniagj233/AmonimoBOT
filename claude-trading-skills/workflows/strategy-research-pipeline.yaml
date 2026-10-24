@@ -1,0 +1,155 @@
+schema_version: 1
+id: strategy-research-pipeline
+display_name: Strategy Research Pipeline
+display_name_ja: 戦略リサーチパイプライン
+cadence: ad-hoc
+estimated_minutes: 60
+target_users:
+  - strategy-researcher
+difficulty: advanced
+api_profile: no-api-basic
+
+when_to_run: >-
+  During offline research with a dated local EOD OHLCV parquet file. Detect
+  research tickets, extract hints, and repeat detection against the same
+  file and as-of date. Evaluate a final ticket only after a separate backtest
+  has produced traceable metrics for that exact strategy and data period.
+when_to_run_ja: >-
+  日付を特定できるローカルの日足 OHLCV parquet を使ったオフライン研究で実行する。
+  研究チケットを検出し、ヒントを抽出した後、同じファイルと基準日で再検出する。
+  最終チケットの評価は、その戦略とデータ期間に対応する追跡可能な指標を
+  別のバックテストで得た後に限る。
+when_not_to_run: >-
+  Do not use undated or unverified historical data, missing backtest metrics,
+  or metrics from another ticket. This workflow does not execute a backtest,
+  export to an external pipeline, authorize a strategy, or place trades.
+when_not_to_run_ja: >-
+  日付や出所を確認できない過去データ、欠損したバックテスト指標、別のチケットの
+  指標は使わない。このワークフローはバックテストの実行、外部パイプラインへの
+  エクスポート、戦略の採用判断、注文の発注を行わない。
+
+required_skills:
+  - edge-candidate-agent
+  - edge-hint-extractor
+  - backtest-expert
+optional_skills: []
+
+artifacts:
+  - id: initial_market_summary
+    produced_by_step: 1
+    required: true
+  - id: initial_anomalies
+    produced_by_step: 1
+    required: true
+  - id: initial_tickets
+    produced_by_step: 1
+    required: false
+  - id: edge_hints
+    produced_by_step: 2
+    required: true
+  - id: final_research_tickets
+    produced_by_step: 3
+    required: true
+  - id: backtest_quality_assessment
+    produced_by_step: 4
+    required: true
+
+steps:
+  - step: 1
+    name: Detect initial candidates from local OHLCV
+    name_ja: ローカル OHLCV から初期候補を検出する
+    skill: edge-candidate-agent
+    produces:
+      - initial_market_summary
+      - initial_anomalies
+      - initial_tickets
+    decision_gate: false
+
+  - step: 2
+    name: Extract dated deterministic edge hints
+    name_ja: 基準日を指定して再現可能なエッジのヒントを抽出する
+    skill: edge-hint-extractor
+    consumes:
+      - initial_market_summary
+      - initial_anomalies
+    produces:
+      - edge_hints
+    decision_gate: false
+    depends_on:
+      - 1
+
+  - step: 3
+    name: Redetect final tickets with the same OHLCV and as-of date
+    name_ja: 同じ OHLCV と基準日で最終チケットを再検出する
+    skill: edge-candidate-agent
+    consumes:
+      - edge_hints
+    produces:
+      - final_research_tickets
+    decision_gate: true
+    decision_question: >-
+      Was the same local OHLCV file and --as-of date used as in step 1, with
+      --hints pointing to step 2's hints.yaml and a separate output directory?
+      Is there a final ticket worth testing? If not, stop here.
+    decision_question_ja: >-
+      ステップ1と同じローカル OHLCV ファイルと --as-of の日付を使い、
+      --hints はステップ2の hints.yaml、出力先は別ディレクトリに指定したか。
+      検証する価値のある最終チケットがなければ、ここで停止する。
+    depends_on:
+      - 1
+      - 2
+
+  - step: 4
+    name: Evaluate separately measured backtest results
+    name_ja: 別途測定したバックテスト結果を評価する
+    skill: backtest-expert
+    consumes:
+      - final_research_tickets
+    produces:
+      - backtest_quality_assessment
+    decision_gate: true
+    decision_question: >-
+      Before invoking the evaluator, can the operator match all supplied
+      metrics to this final ticket's strategy, universe, time period, and
+      cost assumptions? Are all required metrics present, with slippage
+      actually tested? If any answer is no or unknown, HOLD without a verdict.
+      A Deploy/Refine/Abandon score is never approval to trade real funds.
+    decision_question_ja: >-
+      評価器を起動する前に、入力する全指標がこの最終チケットの戦略、対象銘柄群、
+      対象期間、取引費用の前提と一致することを確認できるか。必須指標が揃い、
+      スリッページも実際に検証したか。不明点があれば判定せず HOLD とする。
+      Deploy/Refine/Abandon の評価は実資金取引の承認ではない。
+    depends_on:
+      - 3
+
+manual_review:
+  - Use the same local --ohlcv parquet and --as-of date for both candidate runs;
+    pass that --as-of date to edge-hint-extractor too, and verify hints.yaml
+    records it. Write to separate directories and pass step 2 hints.yaml with
+    --hints on the second run. Do not pass --export-strategies-dir or
+    --pipeline-root.
+  - Preserve the final ticket ID, universe, data period, cost assumptions,
+    and provenance of the separate backtest metrics together with the result.
+  - Supply total-trades, win-rate, avg-win-pct, avg-loss-pct,
+    max-drawdown-pct, years-tested, and num-parameters to backtest-expert;
+    use --slippage-tested only when friction was actually modeled. Missing
+    or unlinked metrics mean HOLD before evaluation.
+  - Independently inspect look-ahead, survivorship, and out-of-sample
+    evidence; the scoring CLI does not verify these. Unknown means HOLD.
+  - Keep research tickets and evaluation local. No external pipeline export,
+    live API write, broker order, or real-money decision follows automatically.
+manual_review_ja:
+  - 2回の候補検出では同じローカルの --ohlcv parquet と --as-of の日付を使い、
+    edge-hint-extractor にも同じ --as-of を渡し、hints.yaml の日付を確認する。
+    出力先を分け、2回目の --hints にステップ2の hints.yaml を指定する。
+    --export-strategies-dir と --pipeline-root は指定しない。
+  - 最終チケット ID、対象銘柄群、データ期間、取引費用の前提、および別途実行した
+    バックテスト指標の出所を、評価結果と共に保存する。
+  - backtest-expert には total-trades、win-rate、avg-win-pct、avg-loss-pct、
+    max-drawdown-pct、years-tested、num-parameters を渡す。
+    --slippage-tested は費用を実際にモデル化した場合にのみ指定する。
+    指標の欠損や対応関係の不明点があれば、評価前に HOLD とする。
+  - 先読み、生存者バイアス、アウト・オブ・サンプルの証拠を別途確認する。
+    評価 CLI はこれらを検証しない。不明なら HOLD とする。
+  - 研究チケットと評価はローカルに留める。外部パイプラインへの出力、
+    live API 書き込み、証券会社への注文、実資金判断には自動で進まない。

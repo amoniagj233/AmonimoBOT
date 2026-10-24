@@ -1,0 +1,15 @@
+{
+  "as_of": "2026-08-28",
+  "avg_pair_corr_20": 0.4294,
+  "pct_above_ma200": 1.0,
+  "pct_above_ma50": 1.0,
+  "regime_label": "RiskOn",
+  "risk_off_score": 37.51,
+  "risk_on_score": 72.35,
+  "rv20": 0.1887,
+  "rv60": 0.1126,
+  "spy_above_ma200": true,
+  "spy_return_1d": null,
+  "universe_count": 3,
+  "vol_trend": 1.6758
+}

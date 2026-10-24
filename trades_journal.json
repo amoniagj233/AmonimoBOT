@@ -1,0 +1,239 @@
+[
+  {
+    "setup_id": "Boom_300_Index_BUY_9960248",
+    "symbol": "Boom 300 Index",
+    "direction": "BUY",
+    "entry_price": 391.129,
+    "sl": 387.512,
+    "tp": 399.369,
+    "volume": 25.82,
+    "tickets": [
+      5814753028,
+      5814753031
+    ],
+    "confidence": "74%",
+    "reason": "M15 EMA20 at 393.072, RSI(14) at 64.7, ATR(14) at 2.635 | Confluence: Tight spread (0.128%); Healthy ATR volatility (2.63)",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 12:26:14 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "GRP-20261024122508-Crash5",
+    "symbol": "Crash 500 Index",
+    "direction": "BUY",
+    "entry_price": 2993.759,
+    "sl": 2943.753,
+    "tp": 3743.753,
+    "volume": 1.0,
+    "tickets": [
+      5814752514,
+      5814752545,
+      5814752549,
+      5814752561,
+      5814752567
+    ],
+    "confidence": "95% (Multi-TP 5-Trade System)",
+    "reason": "5-Trade Multi-TP System (Shared 5% SL = $50.00, TPs: +$10, +$20, +$50, +$100, AI): 5-Trade Multi-TP System (Shared 5% SL, Individual TPs: 1%, 2%, 5%, 10%, AI)",
+    "execution_type": "MULTI_TP_5_TRADES",
+    "execution_time": "2026-10-24 12:25:12 UTC",
+    "status": "CLOSED"
+  },
+  {
+    "setup_id": "GRP-20261024122329-Crash5",
+    "symbol": "Crash 500 Index",
+    "direction": "BUY",
+    "entry_price": 2993.224,
+    "sl": 2943.224,
+    "tp": 3243.224,
+    "volume": 0.6,
+    "tickets": [
+      5814751780,
+      5814751783,
+      5814751786
+    ],
+    "confidence": "95% (Multi-TP 5-Trade System)",
+    "reason": "5-Trade Multi-TP System (Shared 5% SL = $50.00, TPs: +$10, +$20, +$50, +$100, AI): Validation of 5-Trade Multi-TP System with Shared 5% SL",
+    "execution_type": "MULTI_TP_5_TRADES",
+    "execution_time": "2026-10-24 12:23:32 UTC",
+    "status": "CLOSED"
+  },
+  {
+    "setup_id": "Boom_500_Index_BUY_9960245",
+    "symbol": "Boom 500 Index",
+    "direction": "BUY",
+    "entry_price": 6061.503000000001,
+    "sl": 6045.426,
+    "tp": 6096.238,
+    "volume": 6.1,
+    "tickets": [
+      5814749100,
+      5814749115
+    ],
+    "confidence": "98%",
+    "reason": "M15 EMA20 at 6036.131, RSI(14) at 47.9, ATR(14) at 11.292 | Confluence: Price above EMA20; Positive EMA slope",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 12:18:33 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "Step_Index_SELL_9960239",
+    "symbol": "Step Index",
+    "direction": "SELL",
+    "entry_price": 7307.25,
+    "sl": 7314.1,
+    "tp": 7294.4,
+    "volume": 15.42,
+    "tickets": [
+      5814740948,
+      5814740955
+    ],
+    "confidence": "90%",
+    "reason": "M15 EMA20 at 7321.7, RSI(14) at 27.3, ATR(14) at 4.4 | Confluence: Price below EMA20; Negative EMA slope",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 11:59:42 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "Boom_300_Index_BUY_9960239",
+    "symbol": "Boom 300 Index",
+    "direction": "BUY",
+    "entry_price": 390.427,
+    "sl": 386.757,
+    "tp": 398.909,
+    "volume": 24.96,
+    "tickets": [
+      5814740933,
+      5814740938
+    ],
+    "confidence": "74%",
+    "reason": "M15 EMA20 at 393.285, RSI(14) at 65.7, ATR(14) at 2.7 | Confluence: Tight spread (0.128%); Healthy ATR volatility (2.70)",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 11:59:38 UTC",
+    "status": "CLOSED"
+  },
+  {
+    "setup_id": "Boom_300_Index_BUY_9960231",
+    "symbol": "Boom 300 Index",
+    "direction": "BUY",
+    "entry_price": 394.911,
+    "sl": 391.108,
+    "tp": 402.736,
+    "volume": 25.2,
+    "tickets": [
+      5814729543,
+      5814729546
+    ],
+    "confidence": "87%",
+    "reason": "M15 EMA20 at 393.734, RSI(14) at 68.5, ATR(14) at 2.584 | Confluence: Price above EMA20; Positive EMA slope",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 11:33:28 UTC",
+    "status": "CLOSED"
+  },
+  {
+    "setup_id": "Jump_75_Index_SELL_9960229",
+    "symbol": "Jump 75 Index",
+    "direction": "SELL",
+    "entry_price": 5802.77,
+    "sl": 5879.37,
+    "tp": 5647.8,
+    "volume": 1.06,
+    "tickets": [
+      5814727476,
+      5814727480
+    ],
+    "confidence": "85%",
+    "reason": "M15 EMA20 at 5772.48, RSI(14) at 54.3, ATR(14) at 51.46 | Confluence: RSI in prime short momentum zone (54.3); Ultra-low spread (0.033%)",
+    "execution_type": "MANUAL (1-Click)",
+    "execution_time": "2026-10-24 11:28:16 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "Volatility_50_(1s)_Index_BUY_9960227",
+    "symbol": "Volatility 50 (1s) Index",
+    "direction": "BUY",
+    "entry_price": 209087.07,
+    "sl": 207732.09,
+    "tp": 211815.6,
+    "volume": 0.06,
+    "tickets": [
+      5814723722,
+      5814723727
+    ],
+    "execution_time": "2026-10-24 11:21:38 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "SOLUSD_SELL_9960227",
+    "symbol": "SOLUSD",
+    "direction": "SELL",
+    "entry_price": 101.465,
+    "sl": 101.883,
+    "tp": 100.629,
+    "volume": 166.2,
+    "tickets": [
+      5814723699,
+      5814723705
+    ],
+    "execution_time": "2026-10-24 11:21:33 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "Boom_500_Index_BUY_9960223",
+    "symbol": "Boom 500 Index",
+    "direction": "BUY",
+    "entry_price": 6029.199,
+    "sl": 6011.483,
+    "tp": 6065.974,
+    "volume": 1.95,
+    "tickets": [
+      5814719224
+    ],
+    "execution_time": "2026-10-24 11:11:47 UTC",
+    "status": "CLOSED"
+  },
+  {
+    "setup_id": "Volatility_25_(1s)_Index_BUY_9960223",
+    "symbol": "Volatility 25 (1s) Index",
+    "direction": "BUY",
+    "entry_price": 892437.7949999999,
+    "sl": 889588.63,
+    "tp": 898139.53,
+    "volume": 0.02,
+    "tickets": [
+      5814719175,
+      5814719188
+    ],
+    "execution_time": "2026-10-24 11:11:43 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "ETHUSD_SELL_9960223",
+    "symbol": "ETHUSD",
+    "direction": "SELL",
+    "entry_price": 2368.515,
+    "sl": 2376.74436,
+    "tp": 2351.45629,
+    "volume": 8.42,
+    "tickets": [
+      5814719150,
+      5814719152
+    ],
+    "execution_time": "2026-10-24 11:11:38 UTC",
+    "status": "OPEN"
+  },
+  {
+    "setup_id": "Volatility_100_(1s)_Index_SELL_9960223",
+    "symbol": "Volatility 100 (1s) Index",
+    "direction": "SELL",
+    "entry_price": 1024.5100000000002,
+    "sl": 1038.67,
+    "tp": 997.69,
+    "volume": 5.2,
+    "tickets": [
+      5814719073,
+      5814719075
+    ],
+    "execution_time": "2026-10-24 11:11:32 UTC",
+    "status": "OPEN"
+  }
+]

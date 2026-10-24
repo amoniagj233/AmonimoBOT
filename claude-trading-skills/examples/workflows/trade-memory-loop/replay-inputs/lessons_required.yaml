@@ -1,0 +1,8 @@
+human_approved: true
+variant: required-only
+source_artifacts:
+  - postmortem_findings
+source_sha256:
+  postmortem_findings: 3272ce966dcbad845619cfbbf53afd3e616286b00d2bf785544862a84e9c7c18  # pragma: allowlist secret
+decision: journal_only
+lesson_text: Keep the fictional outcome as a journal observation; do not change trading rules from one example.

@@ -1,0 +1,23 @@
+{
+  "evaluation_invoked": false,
+  "provenance": {
+    "as_of": "2026-08-28",
+    "cost_assumptions": {
+      "commission_per_share": 0.0,
+      "slippage_bps": 5
+    },
+    "execution": "manual_contract_only",
+    "final_tickets_sha256": "a439419a04604f5baa3747d64463a40bb5e0cab55b7611be8f5f8a65486b30b4",
+    "limitation": "No backtest or scoring CLI was executed; human review is required.",
+    "period": "fictional offline sample",
+    "source": "fictional separately supplied aggregate metrics; no backtest run by replay",
+    "ticket_id": "edge_auto_vcp_alfa_20260828",
+    "universe": "ALFA fictional replay series"
+  },
+  "reasons": [
+    "metrics period differs from selected ticket test period",
+    "independent look-ahead, survivorship, and out-of-sample reviews are absent",
+    "fictional aggregate metrics are not separate backtest provenance"
+  ],
+  "status": "HOLD"
+}

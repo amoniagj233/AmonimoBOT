@@ -1,0 +1,6 @@
+human_approved: true
+action: accept_rules
+expected_source_sha256:
+  coach_report: 614cf56e7a5d371e2c2ce7fdb3ae103262fac045d3b2fe1f03b703f29f37d619  # pragma: allowlist secret
+accepted_rules:
+  - On the next trade, record both planned risk_r and actual risk_r in the journal so risk discipline becomes verifiable.

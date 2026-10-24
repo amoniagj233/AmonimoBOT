@@ -1,0 +1,30 @@
+as_of: '2026-08-28'
+hints:
+- title: Breadth-supported breakout regime
+  observation: Risk-on regime with pct_above_ma50=1.000 and vol_trend=1.676.
+  symbols: []
+  regime_bias: RiskOn
+  mechanism_tag: behavior
+  preferred_entry_family: pivot_breakout
+  hypothesis_type: breakout
+- title: Positive gap shock in ALFA
+  observation: ALFA printed a large positive gap anomaly (z=7.62).
+  symbols:
+  - ALFA
+  regime_bias: RiskOn
+  mechanism_tag: behavior
+  preferred_entry_family: gap_up_continuation
+  hypothesis_type: breakout
+- title: Participation spike in ALFA
+  observation: Relative volume anomaly detected (z=7.60).
+  symbols:
+  - ALFA
+  regime_bias: RiskOn
+  mechanism_tag: flow
+  preferred_entry_family: pivot_breakout
+  hypothesis_type: breakout
+meta:
+  rule_hints: 3
+  llm_hints: 0
+  total_hints: 3
+  regime: RiskOn

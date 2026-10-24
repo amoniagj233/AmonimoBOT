@@ -1,0 +1,265 @@
+# Install both pre-commit and pre-push hooks:
+#   pre-commit install && pre-commit install --hook-type pre-push
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        # Tracked symlink: with core.symlinks=false (Windows default) it checks
+        # out as a plain file holding the link target, which must stay newline-free.
+        exclude: '^examples/daily-market-dashboard/\.claude/skills$'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      # The FMP client templates carry a python3 shebang. On Windows, where
+      # every file counts as executable, pre-commit reads it and tags them as
+      # Python, but their @@...@@ placeholders are not valid Python.
+      - id: ruff-check
+        args: [--fix]
+        exclude: '\.tmpl$'
+      - id: ruff-format
+        exclude: '\.tmpl$'
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: [--skip, ".venv,*.json,*.csv,*.baseline,skill-packages,*.pyc,__pycache__,docs/Gemfile.lock",
+               --ignore-words-list, "trough,ore,cna,acn,blok,hims,pont,claus,theses",
+               --ignore-regex, "(Depósito|Deposito) inicial"]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        exclude: '\.env$|\.json$|\.csv$|\.md$|\.zip$'
+
+  # Project-specific pre-commit checks
+  - repo: local
+    hooks:
+      - id: no-absolute-paths
+        name: Detect absolute paths with usernames
+        entry: python3 scripts/hooks/check_no_absolute_paths.py
+        language: system
+        types: [text]
+        exclude: '\.git/|\.venv/|\.secrets\.baseline$|/tests?/|CLAUDE\.md$|check_no_absolute_paths\.py$'
+
+      - id: skill-frontmatter
+        name: Validate SKILL.md frontmatter
+        entry: python3 scripts/hooks/check_skill_frontmatter.py
+        language: system
+        files: 'skills/.*/SKILL\.md$'
+
+      - id: skill-references
+        name: Validate SKILL.md bundled resource references
+        entry: python3 scripts/check_skill_references.py
+        language: system
+        files: '^(skills/.*|scripts/check_skill_references\.py|scripts/tests/test_check_skill_references\.py|\.pre-commit-config\.yaml)$'
+        pass_filenames: false
+        always_run: true
+
+      - id: docs-completeness
+        name: Check all skills have doc pages
+        entry: python3 scripts/hooks/check_docs_completeness.py
+        language: system
+        files: 'skills/.*/SKILL\.md$|docs/.*/skills/.*\.md$'
+        pass_filenames: false
+
+      - id: docs-site-source
+        name: Validate docs permalinks and language peers
+        entry: python3 scripts/check_docs_site.py source
+        language: system
+        files: '^(docs/|scripts/check_docs_site\.py|scripts/tests/test_check_docs_site\.py)'
+        pass_filenames: false
+
+      - id: docs-site-allowlist
+        name: Validate docs external-link allowlist policy
+        entry: python3 scripts/check_docs_site.py allowlist
+        language: system
+        files: '^(config/docs-external-link-allowlist\.json|scripts/check_docs_site\.py|scripts/tests/test_check_docs_site\.py)$'
+        pass_filenames: false
+
+      - id: validate-skills-index
+        name: Validate skills-index.yaml against skills/ folder
+        entry: python3 scripts/validate_skills_index.py
+        language: system
+        # Re-run whenever any of the SSoT inputs OR the validator/spec change.
+        # pass_filenames: false → hook always validates the entire repo.
+        files: '^(skills-index\.yaml|skills/[^/]+/SKILL\.md|workflows/.*\.yaml|scripts/validate_skills_index\.py|scripts/tests/test_validate_skills_index\.py|docs/dev/metadata-and-workflow-schema\.md)$'
+        pass_filenames: false
+
+      - id: validate-skillsets
+        name: Validate skillsets/*.yaml manifests (SK001-SK013)
+        entry: python3 scripts/validate_skillsets.py
+        language: system
+        # Inputs: the manifests, plus skills-index.yaml + workflows/*.yaml
+        # (skill/workflow refs and the related_workflows coherence rules are
+        # validated against them — a workflow edit that desyncs a skillset
+        # must fail here). pass_filenames: false → always validate all manifests.
+        files: '^(skillsets/.*\.yaml|skills-index\.yaml|workflows/.*\.yaml|scripts/validate_skillsets\.py|scripts/tests/test_validate_skillsets\.py|docs/dev/metadata-and-workflow-schema\.md)$'
+        pass_filenames: false
+
+      - id: workflow-docs-drift
+        name: Workflow docs drift check (regenerate from workflows/*.yaml)
+        entry: python3 scripts/generate_workflow_docs.py --check
+        language: system
+        # Fire on any input that affects rendered output: manifests, generator,
+        # and the rendered docs themselves (so manual edits are caught).
+        files: '^(workflows/.*\.yaml|scripts/generate_workflow_docs\.py|docs/(en|ja)/workflows\.md)$'
+        pass_filenames: false
+
+      - id: skillset-docs-drift
+        name: Skillset docs drift check (regenerate from skillsets/*.yaml)
+        entry: python3 scripts/generate_skillset_docs.py --check
+        language: system
+        # Fire on any input that affects rendered output: manifests, generator,
+        # and the rendered docs themselves (so manual edits are caught).
+        files: '^(skillsets/.*\.yaml|scripts/generate_skillset_docs\.py|docs/(en|ja)/skillsets\.md)$'
+        pass_filenames: false
+
+      - id: skill-docs-drift
+        name: Skill docs drift check (generator-owned pages only)
+        entry: python3 scripts/generate_skill_docs.py --check
+        language: system
+        # Content-compares ONLY generator-owned pages (frontmatter
+        # `generated: true`); hand-maintained pages (generated:false/absent
+        # or HAND_WRITTEN) are existence/marker-checked only, never reverted.
+        # Fire on every generator input: SKILL.md, references/scripts (resource
+        # list), CLAUDE.md (API/CLI parse), skill-packages/*.skill (download
+        # button), the generator, and the rendered docs themselves.
+        files: '^(skills/[^/]+/SKILL\.md|skills/[^/]+/references/.*|skills/[^/]+/scripts/.*\.py|scripts/generate_skill_docs\.py|CLAUDE\.md|skill-packages/.*\.skill|docs/(en|ja)/skills/[^/]+\.md)$'
+        pass_filenames: false
+
+      - id: docs-cli-examples
+        name: Validate documented CLI examples (issue #336)
+        entry: python3 scripts/check_doc_cli_examples.py validate
+        language: system
+        # Fire on the example-bearing docs (markdown targets of the gate,
+        # including every SKILL.md), the checker, and its tests. Always
+        # validates every configured target (offline, deterministic,
+        # stdlib-only).
+        files: '^(CLAUDE\.md|README\.md|README\.ja\.md|skills/[^/]+/SKILL\.md|scripts/check_doc_cli_examples\.py|scripts/tests/test_check_doc_cli_examples\.py)$'
+        pass_filenames: false
+
+      - id: catalog-drift
+        name: README + CLAUDE.md catalog drift check (regenerate from skills-index.yaml)
+        entry: python3 scripts/generate_catalog_from_index.py --check
+        language: system
+        # Fire on any input that affects rendered output: index, generator,
+        # and the target files themselves (catches manual edits between
+        # sentinel markers).
+        files: '^(skills-index\.yaml|scripts/generate_catalog_from_index\.py|README\.md|README\.ja\.md|CLAUDE\.md)$'
+        pass_filenames: false
+
+      - id: quality-dashboard-drift
+        name: Quality dashboard drift check (regenerate from SSoT inputs + snapshot)
+        entry: python3 scripts/generate_quality_dashboard.py --check
+        language: system
+        # Fire on any deterministic input that shapes the dashboard, the
+        # generator, and the rendered pages themselves (catches manual edits
+        # between the auto-generated page boundaries). skills/**/scripts/tests
+        # is included because has-tests (the Tests column) is filesystem-derived.
+        files: '^(skills-index\.yaml|config/ci-test-policy\.yaml|examples/workflows/replay-coverage\.yaml|docs/assets/quality-dashboard-sources\.json|scripts/generate_quality_dashboard\.py|docs/(en|ja)/quality-dashboard\.md|skills/[^/]+/scripts/tests/.*)$'
+        pass_filenames: false
+
+      - id: website-skill-catalog-check
+        name: Website EN/JA skill catalog canonical-data check
+        entry: python3 scripts/check_skill_catalog.py
+        language: system
+        # Website descriptions remain localized and hand-written. Validate
+        # identity, completeness, counts, and paid-API fields against the index.
+        files: '^(skills-index\.yaml|scripts/check_skill_catalog\.py|scripts/tests/test_check_skill_catalog\.py|docs/(en|ja)/skill-catalog\.md)$'
+        pass_filenames: false
+
+      - id: snapshot-check
+        name: Navigator metadata snapshot drift check (regenerate from SSoT)
+        entry: python3 skills/trading-skills-navigator/scripts/build_snapshot.py --check
+        language: system
+        # Fire on any SSoT input, the normalizer/builder, OR the bundled
+        # snapshot itself (catches manual edits + stale Web-App fallback).
+        # recommend.py is included because build_snapshot.py imports its
+        # normalize_* functions — a normalization change must regen the snapshot.
+        # skillsets/*.yaml is included because PR-N2 load_ssot folds skillsets
+        # into the snapshot — a manifest edit must regen it.
+        files: '^(skills-index\.yaml|workflows/.*\.yaml|skillsets/.*\.yaml|skills/trading-skills-navigator/(assets/metadata_snapshot\.json|scripts/(build_snapshot|recommend)\.py))$'
+        pass_filenames: false
+
+      - id: fmp-client-drift
+        name: FMP client drift check (regenerate vendored fmp_client.py from canonical source)
+        entry: python3 scripts/generate_fmp_client.py --check
+        language: system
+        # Fire on the canonical source, the generator, and every vendored copy
+        # (catches a manual edit to a generated fmp_client.py / _fmp_compat.py).
+        files: '^(scripts/fmp_client/.*|scripts/generate_fmp_client\.py|skills/(pead-screener|earnings-trade-analyzer|ibd-distribution-day-monitor|vcp-screener|parabolic-short-trade-planner|ftd-detector|canslim-screener|macro-regime-detector|market-top-detector|us-undervalued-growth-screener|earnings-calendar|economic-calendar-fetcher|institutional-flow-tracker|cot-contrarian-detector|value-dividend-screener|dividend-growth-pullback-screener|kanchi-dividend-sop)/scripts/(fmp_client|_fmp_compat)\.py)$'
+        pass_filenames: false
+
+      - id: market-calendar-drift
+        name: Shared market calendar drift and dependency contract check
+        entry: python3 scripts/generate_market_calendar.py --check
+        language: system
+        files: '^(\.github/workflows/ci\.yml|config/(market-calendar-dependency|ci-test-policy)\.yaml|pyproject\.toml|scripts/(generate_market_calendar|smoke_market_calendar)\.py|scripts/market_calendar/.*|skills/(breakout-trade-planner|drawdown-circuit-breaker|market-environment-analysis|market-top-detector|parabolic-short-trade-planner|theme-detector)/(requirements\.txt|scripts/_market_calendar\.py|scripts/tests/test_market_calendar_contract\.py)|examples/weekly-trade-strategy/(\.claude/skills|skills)/market-environment-analysis/(requirements\.txt|scripts/(_market_calendar|market_utils)\.py))$'
+        pass_filenames: false
+
+      - id: compat-matrix-drift
+        name: Compat matrix drift check (supported OS/Python)
+        entry: python3 scripts/check_compat_matrix.py
+        language: system
+        # Fire on every workflow (not just the two compat files, so a new
+        # workflow that runs an unsupported combo is rechecked), the matrix
+        # document (the declared mapping), the runtime/policy bounds, and the
+        # checker itself (so a logic change revalidates).
+        files: '^(\.github/workflows/.*|config/python-support\.json|docs/dev/compatibility-matrix\.md|pyproject\.toml|scripts/check_compat_matrix\.py|scripts/tests/test_check_compat_matrix\.py)$'
+        pass_filenames: false
+
+      - id: changed-package-drift
+        name: Packaged skill drift check
+        entry: python3 scripts/check_package_drift_for_changed_skills.py
+        language: system
+        # Keep the historical id for hook continuity, but run the checker in
+        # no-argument mode so missing or stale packages cannot be skipped when
+        # the hook is invoked without filenames.
+        files: '^(skills/[^/]+/.*|skill-packages/[^/]+\.skill|scripts/(check_package_drift_for_changed_skills|package_skills)\.py)$'
+        pass_filenames: false
+
+      - id: fmp-package-drift
+        name: FMP skill package drift check (re-package after vendored client changes)
+        entry: python3 scripts/package_skills.py --check --skill pead-screener --skill earnings-trade-analyzer --skill ibd-distribution-day-monitor --skill vcp-screener --skill parabolic-short-trade-planner --skill ftd-detector --skill canslim-screener --skill macro-regime-detector --skill market-top-detector --skill us-undervalued-growth-screener --skill earnings-calendar --skill economic-calendar-fetcher --skill institutional-flow-tracker --skill cot-contrarian-detector --skill value-dividend-screener --skill dividend-growth-pullback-screener --skill kanchi-dividend-sop
+        language: system
+        # The fmp-client-drift gate validates source; this validates the .skill
+        # bundles so an edited client that was not re-packaged is caught.
+        files: '^(skills/(pead-screener|earnings-trade-analyzer|ibd-distribution-day-monitor|vcp-screener|parabolic-short-trade-planner|ftd-detector|canslim-screener|macro-regime-detector|market-top-detector|us-undervalued-growth-screener|earnings-calendar|economic-calendar-fetcher|institutional-flow-tracker|cot-contrarian-detector|value-dividend-screener|dividend-growth-pullback-screener|kanchi-dividend-sop)/.*|skill-packages/(pead-screener|earnings-trade-analyzer|ibd-distribution-day-monitor|vcp-screener|parabolic-short-trade-planner|ftd-detector|canslim-screener|macro-regime-detector|market-top-detector|us-undervalued-growth-screener|earnings-calendar|economic-calendar-fetcher|institutional-flow-tracker|cot-contrarian-detector|value-dividend-screener|dividend-growth-pullback-screener|kanchi-dividend-sop)\.skill)$'
+        pass_filenames: false
+
+      # Pre-push hook: run validator in --strict-workflows + --strict-metadata
+      # mode. Pre-commit stays in default mode so quick edits aren't blocked,
+      # but pushes must satisfy the stricter contract (workflow internal
+      # consistency + populated metadata fields).
+      - id: validate-skills-index-strict
+        name: Validate skills-index.yaml + workflows + metadata (strict)
+        entry: python3 scripts/validate_skills_index.py --strict-workflows --strict-metadata
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # Pre-push hook: run all skill-level tests before pushing
+      # Tests run per-skill to avoid module name collisions (scorer.py, helpers.py, etc.)
+      - id: pytest-pre-push
+        name: Run all skill tests
+        entry: bash scripts/run_all_tests.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

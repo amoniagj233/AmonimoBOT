@@ -1,0 +1,946 @@
+"""Executable replay coverage for monthly-performance-review (Issue #294)."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import workflow_replay as replay_module  # noqa: E402
+from workflow_replay import (  # noqa: E402
+    EXECUTORS,
+    ReplayError,
+    compare_trees,
+    execute_replay,
+    load_yaml,
+)
+
+SPEC = ROOT / "examples" / "workflows" / "monthly-performance-review" / "replay.yaml"
+INPUTS = SPEC.parent / "replay-inputs"
+
+_PROGRESS = (
+    "........................................................................ [ 27%]\n"
+    "........................................................................ [ 54%]\n"
+    "........................................................................ [ 82%]\n"
+    "..............................................                           [100%]"
+)
+
+# Representative local noise: pytest's session-finish GC failing on stale
+# ``pytest-of-<user>/garbage-*`` directories (random temp path, OSError context,
+# blank line before the ``-- Docs:`` terminator). The live block repeats this
+# entry; the count is not parsed, so a representative subset is sufficient.
+_RM_RF_WARNING_BLOCK = "\n".join(
+    [
+        ".venv/lib/python3.12/site-packages/_pytest/pathlib.py:95",
+        "  .venv/lib/python3.12/site-packages/_pytest/pathlib.py:95: PytestWarning: "
+        "(rm_rf) error removing /private/var/folders/ab/T/pytest-of-user/"
+        "garbage-0123abcd/test_atomic_writer_rejects_exi0",
+        "  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/ab/T/"
+        "pytest-of-user/garbage-0123abcd/test_atomic_writer_rejects_exi0'",
+        "    warnings.warn(",
+        "",
+        ".venv/lib/python3.12/site-packages/_pytest/pathlib.py:95",
+        "  .venv/lib/python3.12/site-packages/_pytest/pathlib.py:95: PytestWarning: "
+        "(rm_rf) error removing /private/var/folders/ab/T/pytest-of-user/garbage-4567efgh",
+        "  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/ab/T/"
+        "pytest-of-user/garbage-4567efgh'",
+        "    warnings.warn(",
+        "",
+    ]
+)
+
+_DOCS_LINE = "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html"
+
+# pytest 9 emits GC-time ``(rm_rf)`` warnings *after* the results line, without a
+# ``warnings summary`` banner or a ``-- Docs:`` footer (layout B). Each entry is
+# a ``pathlib.py:N: PytestWarning: (rm_rf) error removing …`` line, an ``OSError``
+# detail line, and a ``warnings.warn(`` call. Mirrors the live pytest 9.0.2 shape.
+_RM_RF_UNBANNERED_TAIL = "\n".join(
+    [
+        "",
+        ".venv/lib/python3.12/site-packages/_pytest/pathlib.py:96: PytestWarning: (rm_rf) "
+        "error removing /private/var/folders/ab/T/pytest-of-user/garbage-abc0/",
+        "<class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/ab/T/"
+        "pytest-of-user/garbage-abc0/'",
+        "  warnings.warn(",
+        ".venv/lib/python3.12/site-packages/_pytest/pathlib.py:96: PytestWarning: (rm_rf) "
+        "error removing /private/var/folders/ab/T/pytest-of-user/garbage-def1",
+        "<class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/ab/T/"
+        "pytest-of-user/garbage-def1'",
+        "  warnings.warn(",
+    ]
+)
+
+
+def test_monthly_spec_has_honest_executor_evidence() -> None:
+    summary = replay_module.validate_spec(ROOT, SPEC)
+
+    assert summary["workflow_id"] == "monthly-performance-review"
+    assert summary["variants"] == ["required-only", "full-path"]
+    assert summary["native_steps"] == [4, 5]
+    assert summary["composite_steps"] == [2, 3]
+    assert summary["manual_contract_steps"] == [1, 6]
+    assert summary["executor_components"] == {
+        2: ["native_api", "manual_contract"],
+        3: ["native_cli", "manual_contract"],
+    }
+
+
+def test_required_only_aggregates_and_documents_rule_changes(tmp_path: Path) -> None:
+    output = tmp_path / "required"
+    report = execute_replay(ROOT, SPEC, "required-only", output)
+
+    assert report["status"] == "completed"
+    assert [step["step"] for step in report["steps"]] == [1, 2, 6]
+    assert [step["executor_mode"] for step in report["steps"]] == [
+        "manual_contract",
+        "composite",
+        "manual_contract",
+    ]
+
+    aggregate = json.loads((output / "01_monthly_aggregate.json").read_text())
+    postmortem = json.loads((output / "02_aggregate_postmortem.json").read_text())
+    rule_changes = load_yaml(output / "06_rule_changes_for_next_month.yaml")
+
+    assert aggregate["review_type"] == "monthly_aggregate"
+    assert aggregate["summary"]["closed_trades"] == 5
+    assert aggregate["summary"]["realized_pnl"] == 500.0
+    assert aggregate["summary"]["win_rate_pct"] == 40.0
+    assert aggregate["postmortem"]["root_cause"] == "thesis_quality"
+    assert aggregate["monthly"]["consecutive_losses"] == 2
+    assert "TRADE-001" in aggregate["monthly"]["trades"]
+
+    assert postmortem["decision"] == "documented"
+    assert postmortem["category_counts"] == {
+        "execution": 1,
+        "market_environment": 0,
+        "randomness": 1,
+        "thesis_quality": 2,
+    }
+    assert postmortem["native_skill_metrics"]["vcp-screener"]["accuracy"] == 0.0
+    assert postmortem["provenance"]["postmortem_records"] == 5
+
+    assert rule_changes["schema_version"] == 1
+    assert rule_changes["trade_rule_changes"][0].startswith("Enforce the confirmed-pivot rule")
+    assert any(
+        "regime-gate" in note
+        for item in rule_changes["repo_improvements"]
+        for note in item.values()
+    )
+    assert not (output / "03_monthly_performance_coach_report.json").exists()
+    assert not (output / "04_hypothesis_revalidation.json").exists()
+
+    manifest = load_yaml(output / "manifest.yaml")
+    assert manifest["completed_steps"] == [1, 2, 6]
+    assert [item["step"] for item in manifest["optional_steps_skipped"]] == [3, 4, 5]
+
+
+def test_full_path_runs_coach_backtest_and_reviews_skill(tmp_path: Path) -> None:
+    output = tmp_path / "full"
+    report = execute_replay(ROOT, SPEC, "full-path", output)
+
+    assert [step["step"] for step in report["steps"]] == [1, 2, 3, 4, 5, 6]
+    assert report["steps"][2]["executor_components"] == ["native_cli", "manual_contract"]
+    assert report["steps"][3]["executor_mode"] == "native_cli"
+    assert report["steps"][4]["executor_mode"] == "native_cli"
+
+    coach = json.loads((output / "03_monthly_performance_coach_report.json").read_text())
+    patterns = json.loads((output / "03_monthly_behavior_patterns.json").read_text())
+    backtest = json.loads((output / "04_hypothesis_revalidation.json").read_text())
+    skill = json.loads((output / "05_skill_review_findings.json").read_text())
+
+    assert coach["review_id"] == "monthly_2026-05_fictional"
+    assert coach["overall_verdict"] == "REVIEW_REQUIRED"
+    assert coach["summary"]["confidence"] == "medium"
+    assert coach["summary"]["primary_root_cause"] == "thesis_quality"
+    assert coach["scores"]["review_quality_score"] == 76
+    assert patterns["primary_root_cause"] == "thesis_quality"
+    assert patterns["behavioral_pattern_tags"][0]["tag"] == "unknown_size_discipline"
+
+    assert backtest["hypothesis_id"] == "confirmation-pivot-entry"
+    assert "total_score" in backtest["evaluation"]
+    assert backtest["evaluation"]["verdict"]
+
+    assert skill["skill_name"] == "vcp-screener"
+    assert skill["selection_mode"] == "manual"
+    assert skill["final_score"] == 93
+    assert skill["review"]["auto_review"]["test_command"] == (
+        "pytest skills/vcp-screener/scripts/tests -q"
+    )
+
+    decision = json.loads((output / "06_monthly_decision_log.json").read_text())
+    assert set(decision["provenance"].keys()) == {
+        "aggregate_postmortem",
+        "hypothesis_revalidation",
+        "skill_review_findings",
+        "execution_mode",
+        "deferred_evidence",
+    }
+    assert len(decision["rule_changes"]) == 3
+
+
+def test_missing_period_in_closed_theses_fails_without_publication(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    original = INPUTS / "closed_theses.json"
+    altered = input_dir / original.name
+    payload = json.loads(original.read_text())
+    del payload["period"]
+    altered.write_text(json.dumps(payload), encoding="utf-8")
+
+    output = tmp_path / "published"
+    output.mkdir()
+    sentinel = output / "existing.txt"
+    sentinel.write_bytes(b"unchanged\n")
+
+    with pytest.raises(ReplayError) as exc_info:
+        execute_replay(
+            ROOT,
+            SPEC,
+            "required-only",
+            output,
+            input_overrides={"closed_theses": altered},
+        )
+
+    assert exc_info.value.completed_steps == []
+    assert sentinel.read_bytes() == b"unchanged\n"
+    assert {path.name for path in output.iterdir()} == {"existing.txt"}
+
+
+def test_bad_coach_action_fails_closed(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    original = INPUTS / "coach_decision.yaml"
+    altered = input_dir / original.name
+    decision = load_yaml(original)
+    decision["action"] = "bogus"
+    altered.write_text(yaml.safe_dump(decision, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ReplayError, match="not in coach allowed actions") as exc_info:
+        execute_replay(
+            ROOT,
+            SPEC,
+            "full-path",
+            tmp_path / "outputs" / "coach",
+            input_overrides={"coach_decision": altered},
+        )
+
+    assert exc_info.value.completed_steps == [1, 2]
+
+
+def test_postmortem_rejects_aggregate_with_non_canonical_root_cause(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    original = INPUTS / "closed_theses.json"
+    altered = input_dir / original.name
+    payload = json.loads(original.read_text())
+    payload["thesis_records"][0]["root_cause"] = "process"
+    altered.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ReplayError, match="unexpected root_cause") as exc_info:
+        execute_replay(
+            ROOT,
+            SPEC,
+            "required-only",
+            tmp_path / "outputs" / "postmortem",
+            input_overrides={"closed_theses": altered},
+        )
+
+    assert exc_info.value.completed_steps == [1]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"closed_trades": 5.9},
+        {"winners": -1, "losers": 6},
+        {"winners": True, "losers": 4},
+        {"winners": 1.9, "losers": 4},
+        {"winners": 1, "losers": 4, "closed_trades": 6},
+    ],
+)
+def test_postmortem_rejects_non_integer_or_negative_counts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: dict
+) -> None:
+    registration = EXECUTORS["monthly_aggregate"]
+
+    def tamper_run(*args, **kwargs):
+        artifacts = registration.run(*args, **kwargs)
+        canonical = Path(artifacts["monthly_aggregate"]["files"]["canonical"])
+        payload = json.loads(canonical.read_text())
+        payload["summary"].update(mutation)
+        canonical.write_text(json.dumps(payload), encoding="utf-8")
+        return artifacts
+
+    monkeypatch.setitem(
+        EXECUTORS,
+        "monthly_aggregate",
+        replay_module.ExecutorRegistration(
+            mode=registration.mode,
+            run=tamper_run,
+            components=registration.components,
+        ),
+    )
+
+    with pytest.raises(ReplayError) as exc_info:
+        execute_replay(
+            ROOT,
+            SPEC,
+            "required-only",
+            tmp_path / "outputs" / "counts",
+        )
+
+    assert exc_info.value.completed_steps == [1]
+
+
+def test_expected_native_classifications_must_be_canonical(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    original = INPUTS / "pattern_decision.yaml"
+    altered = input_dir / original.name
+    decision = load_yaml(original)
+    decision["expected_native_classifications"] = ["thesis_quality", "execution"]
+    altered.write_text(yaml.safe_dump(decision, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ReplayError, match="expected_native_classifications") as exc_info:
+        execute_replay(
+            ROOT,
+            SPEC,
+            "required-only",
+            tmp_path / "outputs" / "categories",
+            input_overrides={"pattern_decision": altered},
+        )
+
+    assert exc_info.value.completed_steps == [1]
+
+
+def test_invalid_backtest_metrics_fail_closed(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    original = INPUTS / "backtest_params.json"
+    altered = input_dir / original.name
+    payload = json.loads(original.read_text())
+    payload["win_rate"] = 150
+    altered.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ReplayError):
+        execute_replay(
+            ROOT,
+            SPEC,
+            "full-path",
+            tmp_path / "outputs" / "metrics",
+            input_overrides={"backtest_params": altered},
+        )
+
+
+def test_step_six_failure_preserves_existing_destination(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "published"
+    output.mkdir()
+    sentinel = output / "existing.txt"
+    sentinel.write_bytes(b"unchanged\n")
+    registration = EXECUTORS["monthly_decision_log"]
+
+    def fail_after_write(*args, **kwargs):
+        registration.run(*args, **kwargs)
+        raise ReplayError("injected decision-log failure")
+
+    monkeypatch.setitem(
+        EXECUTORS,
+        "monthly_decision_log",
+        replay_module.ExecutorRegistration(
+            mode=registration.mode,
+            run=fail_after_write,
+            components=registration.components,
+        ),
+    )
+
+    with pytest.raises(ReplayError, match="injected decision-log failure"):
+        execute_replay(ROOT, SPEC, "required-only", output)
+
+    assert sentinel.read_bytes() == b"unchanged\n"
+    assert {path.name for path in output.iterdir()} == {"existing.txt"}
+
+
+def test_native_commands_are_offline_and_do_not_launch_uv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    commands: list[list[str]] = []
+    environments: list[dict[str, str]] = []
+    real_run = replay_module.subprocess.run
+
+    def capture(command, **kwargs):
+        commands.append([str(part) for part in command])
+        environments.append(dict(kwargs["env"]))
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(replay_module.subprocess, "run", capture)
+    execute_replay(ROOT, SPEC, "full-path", tmp_path / "published")
+
+    assert commands
+    assert all(Path(command[0]).name != "uv" for command in commands)
+    assert all(
+        not any("http://" in part or "https://" in part for part in command) for command in commands
+    )
+    assert all(
+        not any(
+            marker in key.upper()
+            for key in environment
+            for marker in replay_module.SENSITIVE_ENV_MARKERS
+        )
+        for environment in environments
+    )
+    reviewer_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if any(part.endswith("run_dual_axis_review.py") for part in command)
+    ]
+    assert len(reviewer_indexes) == 1
+    reviewer_index = reviewer_indexes[0]
+    reviewer_path = environments[reviewer_index]["PATH"]
+    assert Path(reviewer_path).name == "python-fallback-path"
+    # Reviewer subprocess output must be uncolored so the warnings-summary anchors
+    # cannot be defeated by ANSI escapes.
+    assert environments[reviewer_index]["NO_COLOR"] == "1"
+    assert environments[reviewer_index]["PY_COLORS"] == "0"
+    assert all(
+        environment["PATH"] != reviewer_path
+        for index, environment in enumerate(environments)
+        if index != reviewer_index
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv run --extra dev pytest skills/vcp-screener/scripts/tests -q",
+        f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q",
+    ],
+)
+def test_skill_review_test_command_normalizes_supported_launchers(command: str) -> None:
+    report = {"auto_review": {"test_status": "passed", "test_command": command}}
+
+    replay_module._normalize_review_test_command(report)
+
+    assert report["auto_review"]["test_command"] == ("pytest skills/vcp-screener/scripts/tests -q")
+
+
+def test_skill_review_test_command_preserves_pytest_arguments_byte_for_byte() -> None:
+    arguments = "skills/vcp-screener/scripts/tests -q  --maxfail=1"
+    report = {
+        "auto_review": {
+            "test_status": "passed",
+            "test_command": f"uv run --extra dev pytest {arguments}",
+        }
+    }
+
+    replay_module._normalize_review_test_command(report)
+
+    assert report["auto_review"]["test_command"] == f"pytest {arguments}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv run pytest skills/vcp-screener/scripts/tests -q",
+        "uv run --extra ci pytest skills/vcp-screener/scripts/tests -q",
+        f"{sys.executable} -m unittest skills/vcp-screener/scripts/tests -q",
+        f"{sys.executable} -I -m pytest skills/vcp-screener/scripts/tests -q",
+        f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q && echo bad",
+        "uv run --extra dev pytest",
+    ],
+)
+def test_skill_review_test_command_rejects_unknown_or_shell_forms(command: str) -> None:
+    report = {"auto_review": {"test_status": "passed", "test_command": command}}
+
+    with pytest.raises(ReplayError):
+        replay_module._normalize_review_test_command(report)
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["not_found", "tool_missing", "not_applicable", "skipped"],
+)
+def test_skill_review_test_command_preserves_valid_null_statuses(status: str) -> None:
+    report = {"auto_review": {"test_status": status, "test_command": None}}
+
+    replay_module._normalize_review_test_command(report)
+
+    assert report["auto_review"]["test_command"] is None
+
+
+@pytest.mark.parametrize(
+    ("status", "command"),
+    [
+        ("passed", None),
+        ("failed", ""),
+        ("timeout", None),
+        ("not_found", "uv run --extra dev pytest tests -q"),
+        ("unexpected", None),
+    ],
+)
+def test_skill_review_test_command_rejects_status_command_mismatches(
+    status: str, command: str | None
+) -> None:
+    report = {"auto_review": {"test_status": status, "test_command": command}}
+
+    with pytest.raises(ReplayError):
+        replay_module._normalize_review_test_command(report)
+
+
+def test_skill_review_command_is_normalized_before_other_replay_metadata() -> None:
+    raw_target = ROOT / "skills" / "vcp-screener" / "scripts" / "tests"
+    report = {
+        "generated_at": "2026-09-11T12:34:56Z",
+        "auto_review": {
+            "test_status": "passed",
+            "test_command": f"{sys.executable} -m pytest {raw_target.as_posix()} -q",
+            "test_output": "262 passed in 1.23s",
+        },
+    }
+
+    replay_module._normalize_review_test_command(report)
+    canonical = replay_module._canonicalize(
+        report,
+        "2026-05-31T23:59:59Z",
+        {ROOT.as_posix() + "/": ""},
+    )
+    canonical = replay_module._normalize_elapsed(canonical)
+
+    assert canonical == {
+        "generated_at": "2026-05-31T23:59:59Z",
+        "auto_review": {
+            "test_status": "passed",
+            "test_command": "pytest skills/vcp-screener/scripts/tests -q",
+            "test_output": "262 passed in <elapsed>s",
+        },
+    }
+
+
+def test_skill_review_command_variants_have_identical_provenance_digest() -> None:
+    fixed_timestamp = "2026-05-31T23:59:59Z"
+    commands = [
+        "uv run --extra dev pytest skills/vcp-screener/scripts/tests -q",
+        f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q",
+    ]
+    digests = []
+    for command in commands:
+        report = {
+            "auto_review": {
+                "test_status": "passed",
+                "test_command": command,
+                "test_output": "262 passed in 1.23s",
+            }
+        }
+        replay_module._normalize_review_test_command(report)
+        canonical = replay_module._normalize_elapsed(
+            replay_module._canonicalize(report, fixed_timestamp, {})
+        )
+        payload = {"schema_version": 1, "review": canonical}
+        digests.append(replay_module._payload_sha256(payload, fixed_timestamp))
+
+    assert len(set(digests)) == 1
+
+
+@pytest.mark.parametrize("symlink_root", [False, True])
+def test_monthly_goldens_are_byte_reproducible(tmp_path: Path, symlink_root: bool) -> None:
+    repo_root = ROOT
+    if symlink_root:
+        repo_root = tmp_path / "repo-link"
+        try:
+            repo_root.symlink_to(ROOT, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"directory symlinks unavailable: {exc}")
+    for variant, golden_name in (
+        ("required-only", "replay-run"),
+        ("full-path", "replay-run-full-path"),
+    ):
+        actual = tmp_path / variant
+        execute_replay(repo_root, SPEC, variant, actual)
+        assert compare_trees(actual, SPEC.parent / golden_name) == []
+
+
+def test_monthly_skill_review_canonicalizes_resolved_repo_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    alias = tmp_path / "repo-link"
+    try:
+        alias.symlink_to(ROOT, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+
+    def fake_run_cli(command, repo_root, **kwargs):
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        resolved = repo_root.resolve()
+        report = {
+            "skill_name": "vcp-screener",
+            "auto_review": {
+                "test_status": "passed",
+                "test_command": f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q",
+                "test_output": "262 passed in 0.53s",
+                "findings": [{"path": f"{resolved}/skills/vcp-screener/SKILL.md"}],
+                "diagnostic": f"Read '{resolved}/skills/vcp-screener/SKILL.md'",
+            },
+            "final_review": {"score": 93},
+        }
+        (output_dir / "skill_review_vcp-screener_20260913.json").write_text(
+            json.dumps(report), encoding="utf-8"
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(replay_module, "_run_cli", fake_run_cli)
+    spec = load_yaml(SPEC)
+    step = {
+        "output_files": {"skill_review_findings": {"canonical": "05_skill_review_findings.json"}}
+    }
+    inputs = replay_module.validate_spec(ROOT, SPEC)["inputs"]
+    outputs = []
+    for name, root in (("real", ROOT), ("alias", alias)):
+        artifacts = EXECUTORS["monthly_skill_review"].run(
+            root, spec, step, inputs, {}, tmp_path / name / "work", tmp_path / name / "stage"
+        )
+        outputs.append(Path(artifacts["skill_review_findings"]["files"]["canonical"]).read_bytes())
+
+    assert outputs[0] == outputs[1]
+    review = json.loads(outputs[1])["review"]["auto_review"]
+    assert review["findings"] == [{"path": "skills/vcp-screener/SKILL.md"}]
+    assert review["diagnostic"] == "Read 'skills/vcp-screener/SKILL.md'"
+
+
+def test_pytest_rm_rf_warning_summary_is_stripped_to_golden_tail() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=============================== warnings summary ===============================\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        f"{_DOCS_LINE}\n"
+        "262 passed, 6 warnings in 0.53s"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert stripped == f"{_PROGRESS}\n262 passed in 0.53s"
+    assert replay_module._normalize_elapsed(stripped) == f"{_PROGRESS}\n262 passed in <elapsed>s"
+    assert "warnings summary" not in stripped
+    assert "garbage-" not in stripped
+
+
+def test_pytest_failed_short_summary_is_preserved() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=============================== warnings summary ===============================\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        f"{_DOCS_LINE}\n"
+        "=========================== short test summary info ============================\n"
+        "FAILED skills/x/scripts/tests/test_a.py::test_b - assert 1 == 2\n"
+        "1 failed, 1 passed, 1 warning in 0.02s"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert "short test summary info" in stripped
+    assert "FAILED skills/x/scripts/tests/test_a.py::test_b - assert 1 == 2" in stripped
+    assert stripped.endswith("1 failed, 1 passed in 0.02s")
+
+
+def test_genuine_warning_summary_is_not_stripped() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=============================== warnings summary ===============================\n"
+        "skills/x/scripts/foo.py:10\n"
+        "  skills/x/scripts/foo.py:10: DeprecationWarning: legacy path\n"
+        "    warnings.warn(\n"
+        f"{_DOCS_LINE}\n"
+        "1 passed, 1 warning in 0.02s"
+    )
+
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_warning_summary_without_docs_line_is_unchanged() -> None:
+    output = (
+        "x\n"
+        "=== warnings summary ===\n"
+        "  PytestWarning: (rm_rf) error removing /tmp/garbage-abcd\n"
+        "1 passed, 1 warning in 0.02s"
+    )
+
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_output_without_warning_summary_is_unchanged() -> None:
+    output = "262 passed in 0.53s"
+
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_pytest_mixed_warning_summary_is_not_stripped() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=== warnings summary ===\n"
+        "  PytestWarning: (rm_rf) error removing /tmp/garbage-abcd\n"
+        "  PytestWarning: some genuine pytest warning\n"
+        f"{_DOCS_LINE}\n"
+        "1 passed, 2 warnings in 0.02s"
+    )
+
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_pytest_custom_warning_class_mixed_with_noise_is_not_stripped() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=== warnings summary ===\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        "  skills/x/scripts/foo.py:12: DataQualityAlert: stale dividend source\n"
+        f"{_DOCS_LINE}\n"
+        "1 passed, 2 warnings in 0.02s"
+    )
+
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_warnings_count_fragment_outside_status_line_is_preserved() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=== warnings summary ===\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        f"{_DOCS_LINE}\n"
+        'FAILED t.py::test_b - AssertionError: expected ", 5 warnings in the text"\n'
+        "1 failed, 1 warning in 0.02s"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert 'expected ", 5 warnings in the text"' in stripped
+    assert stripped.endswith("1 failed in 0.02s")
+
+
+def test_warnings_count_fragment_inside_failure_message_is_preserved() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=== warnings summary ===\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        f"{_DOCS_LINE}\n"
+        "=========================== short test summary info ============================\n"
+        'FAILED t.py::test_b - AssertionError: expected "2 passed, 5 warnings in 0.53s"\n'
+        "1 failed, 1 warning in 0.02s"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert 'expected "2 passed, 5 warnings in 0.53s"' in stripped
+    assert stripped.endswith("1 failed in 0.02s")
+
+
+def test_pytest_unbannered_tail_rm_rf_is_stripped_to_golden_tail() -> None:
+    output = f"{_PROGRESS}\n262 passed, 6 warnings in 0.53s{_RM_RF_UNBANNERED_TAIL}"
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert stripped == f"{_PROGRESS}\n262 passed in 0.53s"
+    assert replay_module._normalize_elapsed(stripped) == f"{_PROGRESS}\n262 passed in <elapsed>s"
+    assert "garbage-" not in stripped
+    assert "(rm_rf)" not in stripped
+
+
+def test_pytest_unbannered_tail_keeps_genuine_unbannered_warning() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "1 passed, 1 warning in 0.02s\n"
+        "skills/x/scripts/foo.py:10\n"
+        "  skills/x/scripts/foo.py:10: DeprecationWarning: legacy path\n"
+        "    warnings.warn(\n"
+        f"{_RM_RF_UNBANNERED_TAIL}"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert "DeprecationWarning: legacy path" in stripped
+    assert "1 passed in 0.02s" in stripped
+    assert "(rm_rf)" not in stripped
+
+
+def test_pytest_unbannered_tail_keeps_custom_warning_class() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "1 passed, 1 warning in 0.02s\n"
+        "skills/x/scripts/foo.py:12: DataQualityAlert: stale dividend source\n"
+        f"{_RM_RF_UNBANNERED_TAIL}"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert "DataQualityAlert: stale dividend source" in stripped
+    assert "(rm_rf)" not in stripped
+    assert "1 passed in 0.02s" in stripped
+
+
+def test_status_line_with_subtests_still_has_count_removed() -> None:
+    output = (
+        f"{_PROGRESS}\n"
+        "=== warnings summary ===\n"
+        f"{_RM_RF_WARNING_BLOCK}\n"
+        f"{_DOCS_LINE}\n"
+        "2 subtests passed, 2 warnings in 0.50s"
+    )
+
+    stripped = replay_module._strip_pytest_warning_summary(output)
+
+    assert stripped.endswith("2 subtests passed in 0.50s")
+
+
+def test_pytest_unbannered_tail_without_rm_rf_is_unchanged() -> None:
+    output = f"{_PROGRESS}\n262 passed in 0.53s\n\n"
+    assert replay_module._strip_pytest_warning_summary(output) == output
+
+
+def test_run_cli_rejects_sensitive_env_override() -> None:
+    with pytest.raises(ReplayError, match="sensitive"):
+        replay_module._run_cli(
+            [sys.executable, "-c", "pass"],
+            ROOT,
+            env_overrides={"FMP_API_KEY": "x"},
+        )
+
+
+def test_monthly_skill_review_normalizes_captured_warnings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Wiring guard: the executor itself must normalize the captured test output."""
+    registration = EXECUTORS["monthly_skill_review"]
+    dirty_report = {
+        "skill_name": "vcp-screener",
+        "auto_review": {
+            "test_status": "passed",
+            "test_command": f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q",
+            "test_output": (
+                f"{_PROGRESS}\n"
+                "=== warnings summary ===\n"
+                f"{_RM_RF_WARNING_BLOCK}\n"
+                f"{_DOCS_LINE}\n"
+                "262 passed, 6 warnings in 0.53s"
+            ),
+            "grades": {},
+        },
+        "final_review": {"score": 93},
+    }
+
+    def fake_run_cli(command, repo_root, **kwargs):
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "skill_review_vcp-screener_20260913.json").write_text(
+            json.dumps(dirty_report), encoding="utf-8"
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(replay_module, "_run_cli", fake_run_cli)
+    spec = load_yaml(SPEC)
+    step = {
+        "output_files": {"skill_review_findings": {"canonical": "05_skill_review_findings.json"}}
+    }
+    inputs = replay_module.validate_spec(ROOT, SPEC)["inputs"]
+
+    artifacts = registration.run(
+        ROOT, spec, step, inputs, {}, tmp_path / "work", tmp_path / "stage"
+    )
+
+    payload = json.loads(Path(artifacts["skill_review_findings"]["files"]["canonical"]).read_text())
+    test_output = payload["review"]["auto_review"]["test_output"]
+    assert "warnings summary" not in test_output
+    assert test_output.endswith("262 passed in <elapsed>s")
+
+
+def test_review_test_output_is_normalized_before_other_replay_metadata() -> None:
+    report = {
+        "generated_at": "2026-09-11T12:34:56Z",
+        "auto_review": {
+            "test_status": "passed",
+            "test_command": f"{sys.executable} -m pytest skills/vcp-screener/scripts/tests -q",
+            "test_output": (
+                f"{_PROGRESS}\n"
+                "=============================== warnings summary "
+                "===============================\n"
+                f"{_RM_RF_WARNING_BLOCK}\n"
+                f"{_DOCS_LINE}\n"
+                "262 passed, 6 warnings in 1.23s"
+            ),
+        },
+    }
+
+    replay_module._normalize_review_test_command(report)
+    replay_module._normalize_review_test_output(report)
+    canonical = replay_module._normalize_elapsed(
+        replay_module._canonicalize(report, "2026-05-31T23:59:59Z", {str(ROOT) + "/": ""})
+    )
+
+    assert canonical["auto_review"]["test_output"] == (f"{_PROGRESS}\n262 passed in <elapsed>s")
+    assert canonical["auto_review"]["test_command"] == "pytest skills/vcp-screener/scripts/tests -q"
+
+
+def test_monthly_coach_scrubs_absolute_source_records(monkeypatch, tmp_path: Path) -> None:
+    aggregate = tmp_path / "stage" / "aggregate.json"
+    records = [
+        str(aggregate),
+        str(aggregate.parent / "nested" / "nested.json"),
+        str(ROOT / "examples" / "repo-record.json"),
+        "/external/reports/external.json",
+        r"C:\reports\windows.json",
+        "C:/reports/forward.json",
+        r"\\server\share\unc.json",
+        "relative/record.json",
+        "./aggregate.json",
+        "../parent/record.json",
+        "",
+        None,
+        7,
+    ]
+    spec = load_yaml(SPEC)
+    inputs = replay_module.validate_spec(ROOT, SPEC)["inputs"]
+    decision = load_yaml(inputs["coach_decision"])
+
+    def fake_run_cli(command, repo_root):
+        reports = Path(command[command.index("--output-dir") + 1])
+        reports.mkdir(parents=True)
+        (reports / "monthly-coach.json").write_text(
+            json.dumps(
+                {
+                    "source_records": records,
+                    "human_decision_gate": {"allowed_actions": [decision["action"]]},
+                    "notes": "/external/reports/external.json",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(replay_module, "_run_cli", fake_run_cli)
+    step = next(row for row in spec["steps"] if row["executor"] == "monthly_coach")
+    consumed = {
+        "monthly_aggregate": {"files": {"canonical": str(aggregate)}},
+        "aggregate_postmortem": {},
+    }
+    artifacts = EXECUTORS["monthly_coach"].run(
+        ROOT, spec, step, inputs, consumed, tmp_path / "work", tmp_path / "stage"
+    )
+    result = json.loads(
+        Path(artifacts["monthly_performance_coach_report"]["files"]["canonical"]).read_text()
+    )
+    assert result["source_records"] == [
+        "./aggregate.json",
+        "./nested.json",
+        "./repo-record.json",
+        "./external.json",
+        "./windows.json",
+        "./forward.json",
+        "./unc.json",
+        *records[7:],
+    ]
+    assert result["notes"] == "/external/reports/external.json"

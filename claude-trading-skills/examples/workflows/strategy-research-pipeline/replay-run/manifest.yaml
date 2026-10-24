@@ -1,0 +1,51 @@
+workflow_id: strategy-research-pipeline
+sample_type: required-only
+status: completed
+completed_steps:
+- 1
+- 2
+- 3
+- 4
+required_steps_not_executed: []
+illustrative: true
+generated_by: scripts/workflow_replay.py generate
+prompt: prompt.md
+network_policy: offline-input-required
+optional_steps_skipped: []
+artifacts:
+- step: 1
+  artifact_id: initial_anomalies
+  skill: edge-candidate-agent
+  execution_mode: native_cli
+  files:
+    canonical: 01_initial_anomalies.json
+- step: 1
+  artifact_id: initial_market_summary
+  skill: edge-candidate-agent
+  execution_mode: native_cli
+  files:
+    canonical: 01_initial_market_summary.json
+- step: 1
+  artifact_id: initial_tickets
+  skill: edge-candidate-agent
+  execution_mode: native_cli
+  files:
+    canonical: 01_initial_tickets.json
+- step: 2
+  artifact_id: edge_hints
+  skill: edge-hint-extractor
+  execution_mode: native_cli
+  files:
+    canonical: 02_edge_hints.yaml
+- step: 3
+  artifact_id: final_research_tickets
+  skill: edge-candidate-agent
+  execution_mode: native_cli
+  files:
+    canonical: 03_final_research_tickets.json
+- step: 4
+  artifact_id: backtest_quality_assessment
+  skill: backtest-expert
+  execution_mode: manual_contract
+  files:
+    canonical: 04_backtest_quality_assessment.json

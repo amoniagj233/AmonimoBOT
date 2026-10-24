@@ -1,0 +1,68 @@
+{
+  "bias": "NEUTRAL",
+  "component_scores": {
+    "breadth_score": 66,
+    "uptrend_score": 71
+  },
+  "composite_score": 48.5,
+  "confidence": "LOW",
+  "exposure_ceiling_pct": 47,
+  "generated_at": "2026-01-15T13:08:00+00:00",
+  "input_lineage": {
+    "accepted_inputs": {
+      "breadth": {
+        "adjusted": false,
+        "as_of": "2026-01-14T21:00:00+00:00",
+        "corporate_actions_handled": false,
+        "endpoint": "market-regime-breadth-component-fixture",
+        "point_in_time": false,
+        "provider": "fictional-fixture",
+        "retrieved_at": "2026-01-15T13:08:00+00:00",
+        "run_id": "fictional-market-regime-daily-run-001",
+        "schema_version": "1.0",
+        "scope": "fictional component fixture only; provider fetch not executed",
+        "survivorship_free": false,
+        "timezone": "America/New_York"
+      },
+      "uptrend": {
+        "adjusted": false,
+        "as_of": "2026-01-14T21:00:00+00:00",
+        "corporate_actions_handled": false,
+        "endpoint": "market-regime-uptrend-component-fixture",
+        "point_in_time": false,
+        "provider": "fictional-fixture",
+        "retrieved_at": "2026-01-15T13:08:00+00:00",
+        "run_id": "fictional-market-regime-daily-run-001",
+        "schema_version": "1.0",
+        "scope": "fictional component fixture only; provider fetch not executed",
+        "survivorship_free": false,
+        "timezone": "America/New_York"
+      }
+    },
+    "boundaries": [
+      "quality flags are conservative, not independently verified",
+      "auxiliary source dates are not verified",
+      "optional top-risk and other inputs are outside this gate",
+      "run_id is a caller consistency marker, not authentication or PIT proof"
+    ],
+    "evaluation_at": "2026-01-15T13:08:00+00:00",
+    "max_age_days": 3,
+    "run_id": "fictional-market-regime-daily-run-001"
+  },
+  "inputs_missing": [
+    "regime",
+    "top_risk",
+    "institutional",
+    "sector",
+    "theme",
+    "ftd"
+  ],
+  "inputs_provided": [
+    "breadth",
+    "uptrend"
+  ],
+  "participation": "BROAD",
+  "rationale": "Broad participation indicates healthy market internals. Missing critical inputs (regime, top_risk) reduce confidence. New entries not recommended; consider trimming on strength.",
+  "recommendation": "REDUCE_ONLY",
+  "schema_version": "1.0"
+}

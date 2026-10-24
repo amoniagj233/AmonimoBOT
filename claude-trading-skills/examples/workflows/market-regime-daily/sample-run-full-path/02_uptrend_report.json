@@ -1,0 +1,141 @@
+{
+  "components": {
+    "historical_context": {
+      "data_available": true,
+      "score": 72
+    },
+    "market_breadth": {
+      "data_available": true,
+      "score": 85
+    },
+    "momentum": {
+      "data_available": true,
+      "score": 68
+    },
+    "sector_participation": {
+      "data_available": true,
+      "score": 74
+    },
+    "sector_rotation": {
+      "data_available": true,
+      "score": 66
+    }
+  },
+  "composite": {
+    "actions": [
+      "Normal position sizing",
+      "New entries on quality setups",
+      "Standard stop-loss levels",
+      "Monitor sector rotation for early warnings"
+    ],
+    "active_warnings": [
+      {
+        "actions": [
+          "Verify individual sector trends before entering positions",
+          "Avoid sectors diverging from their group majority",
+          "Monitor for group convergence or further deterioration"
+        ],
+        "description": "Significant divergence detected within sector groups. Some sectors within the same group are moving in opposite directions, suggesting hidden risk beneath the averages.",
+        "flag": "divergence",
+        "label": "SECTOR DIVERGENCE WARNING"
+      }
+    ],
+    "component_scores": {
+      "historical_context": {
+        "label": "Historical Context",
+        "score": 72,
+        "weight": 0.1,
+        "weighted_contribution": 7.2
+      },
+      "market_breadth": {
+        "label": "Market Breadth (Overall)",
+        "score": 85,
+        "weight": 0.3,
+        "weighted_contribution": 25.5
+      },
+      "momentum": {
+        "label": "Momentum",
+        "score": 68,
+        "weight": 0.2,
+        "weighted_contribution": 13.6
+      },
+      "sector_participation": {
+        "label": "Sector Participation",
+        "score": 74,
+        "weight": 0.25,
+        "weighted_contribution": 18.5
+      },
+      "sector_rotation": {
+        "label": "Sector Rotation",
+        "score": 66,
+        "weight": 0.15,
+        "weighted_contribution": 9.9
+      }
+    },
+    "composite_score": 71.7,
+    "composite_score_raw": 74.7,
+    "data_quality": {
+      "available_count": 5,
+      "label": "Complete (5/5 components)",
+      "missing_components": [],
+      "total_components": 5
+    },
+    "exposure_guidance": "Normal Exposure, Lower End (80-90%)",
+    "guidance": "Healthy market breadth supporting equity allocation. Standard position management. However, active warnings suggest operating at the conservative end of the range.",
+    "strongest_component": {
+      "component": "market_breadth",
+      "label": "Market Breadth (Overall)",
+      "score": 85
+    },
+    "warning_penalty": -3,
+    "warning_penalty_breakdown": [
+      {
+        "flag": "divergence",
+        "penalty": -3
+      }
+    ],
+    "weakest_component": {
+      "component": "sector_rotation",
+      "label": "Sector Rotation",
+      "score": 66
+    },
+    "zone": "Bull",
+    "zone_color": "light_green",
+    "zone_detail": "Bull-Upper",
+    "zone_proximity": {
+      "at_boundary": true,
+      "distance": -8.3,
+      "label": "Near boundary: -8.3 points from 80 (below)",
+      "nearest_boundary": 80
+    }
+  },
+  "data_provenance": {
+    "adjusted": false,
+    "as_of": "2026-01-14T21:00:00+00:00",
+    "corporate_actions_handled": false,
+    "endpoint": "market-regime-uptrend-component-fixture",
+    "point_in_time": false,
+    "provider": "fictional-fixture",
+    "retrieved_at": "2026-01-15T13:08:00+00:00",
+    "run_id": "fictional-market-regime-daily-run-001",
+    "schema_version": "1.0",
+    "scope": "fictional component fixture only; provider fetch not executed",
+    "survivorship_free": false,
+    "timezone": "America/New_York"
+  },
+  "metadata": {
+    "as_of": "2026-01-14T21:00:00+00:00",
+    "data_mode": "fictional offline component fixture",
+    "generated_at": "2026-01-15T13:08:00+00:00"
+  },
+  "provenance": {
+    "execution_mode": "native_api",
+    "fixture_boundaries": [
+      "provider fetch not executed",
+      "individual component calculators not executed",
+      "live API failure not exercised"
+    ],
+    "native_surface": "scorer.calculate_composite_score + report_generator.generate_json_report"
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,83 @@
+schema_version: 1
+workflow_id: trade-memory-loop
+fixed_timestamp: "2026-02-27T16:30:00+00:00"
+
+inputs:
+  active_thesis: replay-inputs/active_thesis.yaml
+  close_instruction: replay-inputs/close_instruction.yaml
+  realized_returns: replay-inputs/realized_returns.json
+  root_cause_decision: replay-inputs/root_cause_decision.yaml
+  coach_decision: replay-inputs/coach_decision.yaml
+  backtest_metrics: replay-inputs/backtest_metrics.json
+  lessons_required: replay-inputs/lessons_required.yaml
+  lessons_full: replay-inputs/lessons_full.yaml
+
+steps:
+  - step: 1
+    executor: trade_memory_close
+    executor_mode: native_cli
+    gate_policy: continue
+    output_files:
+      closed_thesis_record:
+        canonical: 01_closed_thesis_record.yaml
+
+  - step: 2
+    executor: trade_memory_postmortem
+    executor_mode: composite
+    executor_components:
+      - native_api
+      - manual_contract
+    gate_policy: record_only
+    output_files:
+      postmortem_findings:
+        canonical: 02_postmortem_findings.json
+
+  - step: 3
+    executor: trade_memory_coach
+    executor_mode: composite
+    executor_components:
+      - native_cli
+      - manual_contract
+    gate_policy: record_only
+    output_files:
+      performance_coach_report:
+        canonical: 03_performance_coach_report.json
+      next_session_operating_rules:
+        canonical: 03_next_session_operating_rules.yaml
+
+  - step: 4
+    executor: trade_memory_backtest
+    executor_mode: native_cli
+    gate_policy: continue
+    output_files:
+      backtest_validation:
+        canonical: 04_backtest_validation.json
+
+  - step: 5
+    executor: trade_memory_lessons
+    executor_mode: composite
+    executor_components:
+      - native_api
+      - manual_contract
+    gate_policy: continue
+    output_files:
+      lessons_log_entry:
+        canonical: 05_lessons_log_entry.md
+        state: 05_closed_thesis_with_lessons.yaml
+        provenance: 05_lessons_provenance.yaml
+
+variants:
+  required-only:
+    enabled_steps:
+      - 1
+      - 2
+      - 5
+    golden_dir: sample-run
+  full-path:
+    enabled_steps:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    golden_dir: sample-run-full-path

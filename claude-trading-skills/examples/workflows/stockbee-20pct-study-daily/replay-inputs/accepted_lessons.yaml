@@ -1,0 +1,12 @@
+human_approved: true
+source_artifacts:
+  - twenty_pct_cohort_summary
+  - edge_hints_yaml
+source_sha256:
+  twenty_pct_cohort_summary: 17a60a0ea090410bff55747071ab59b2a43d191864827a9f3cff280f9147517e  # pragma: allowlist secret
+  edge_hints_yaml: 32c77310760299b3d9e231e82b4f55a66a22d48e84790a101c278750cb7e0148  # pragma: allowlist secret
+lessons:
+  - lesson_id: fictional-earnings-continuation-observation
+    decision: journal_only
+    observation: Keep this single fictional continuation example as a research observation only.
+    changes_trading_rules: false

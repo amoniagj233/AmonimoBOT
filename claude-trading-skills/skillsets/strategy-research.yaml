@@ -1,0 +1,30 @@
+schema_version: 1
+id: strategy-research
+display_name: Strategy Research
+category: strategy-research
+timeframe: research
+difficulty: advanced
+api_profile: no-api-basic
+target_users:
+  - strategy-researcher
+
+when_to_use: >-
+  Research a long-side US equity idea from local historical observations:
+  detect candidate tickets, refine them with hints, and evaluate separately
+  measured backtest results. The strategy-research-pipeline workflow is an
+  offline research path, not an end-to-end backtest runner.
+when_not_to_use: >-
+  Do not use this bundle to place trades or treat its score as strategy
+  approval. Stop before evaluation if the final ticket cannot be matched
+  to complete, provenance-checked backtest metrics and bias evidence.
+
+required_skills:
+  - edge-candidate-agent
+  - edge-hint-extractor
+  - backtest-expert
+recommended_skills: []
+optional_skills:
+  - strategy-pivot-designer
+
+related_workflows:
+  - strategy-research-pipeline

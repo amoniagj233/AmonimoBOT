@@ -1,0 +1,46 @@
+{
+  "terminal_path": "C:/Users/amoni/MT5_Tester/terminal64.exe",
+  "folders": {
+    "candidates": "C:/Users/amoni/MT5_Tester/MQL5/Experts/candidate_bots",
+    "in_testing": "C:/Users/amoni/MT5_Tester/MQL5/Experts/bots_in_testing",
+    "finalists": "C:/Users/amoni/MT5_Tester/MQL5/Experts/finalist_bots"
+  },
+  "sets_dir": null,
+  "common": {
+    "period": "H1",
+    "from": "2024.01.01",
+    "to": "2026.06.30",
+    "model": 4,
+    "deposit": 10000,
+    "currency": "USD",
+    "leverage": 100,
+    "delay_ms": 32,
+    "optimization_criterion": 0,
+    "symbols": [
+      "EURUSD", "GBPUSD", "USDJPY", "XAUUSD"
+    ]
+  },
+  "gates": {
+    "round1_min_positive": 2,
+    "round1_min_profit_multiple": 1.5,
+    "finalist_min_profit_multiple": 2.0,
+    "finalist_max_drawdown_pct": 15.0,
+    "finalist_require_improvement": true
+  },
+  "round2_reference": {
+    "min_profit_pct": 100.0,
+    "max_drawdown_pct": 20.0,
+    "min_pct_positive_months": 60.0,
+    "require_all_years_positive": false,
+    "min_lr_correlation": 0.70,
+    "max_months_to_new_high": 4
+  },
+  "round3": {
+    "range_pct": 0.5,
+    "step_pct": 0.05,
+    "params_after_magic": 6,
+    "magic_param_name": "MagicNumber",
+    "use_learned_order": true
+  },
+  "timeout_seconds": 3600
+}

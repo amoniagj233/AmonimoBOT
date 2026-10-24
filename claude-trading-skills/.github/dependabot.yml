@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Newer releases need Python >= 3.10 (or fail to import on 3.9), but the
+      # calendar-consuming skills keep a standalone Python 3.9 floor. The pin is
+      # owned by config/market-calendar-dependency.yaml; see
+      # docs/dev/market-calendar-contract.md. Remove when the 3.9 floor is dropped.
+      - dependency-name: pandas-market-calendars
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: bundler
+    directory: /docs
+    schedule:
+      interval: weekly

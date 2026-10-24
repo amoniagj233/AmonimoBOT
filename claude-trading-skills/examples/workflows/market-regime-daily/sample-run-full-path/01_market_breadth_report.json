@@ -1,0 +1,137 @@
+{
+  "components": {
+    "bearish_signal": {
+      "data_available": true,
+      "score": 80
+    },
+    "breadth_level_trend": {
+      "data_available": true,
+      "score": 72
+    },
+    "cycle_position": {
+      "data_available": true,
+      "score": 60
+    },
+    "divergence": {
+      "data_available": true,
+      "score": 50
+    },
+    "historical_percentile": {
+      "data_available": true,
+      "score": 55
+    },
+    "ma_crossover": {
+      "data_available": true,
+      "score": 68
+    }
+  },
+  "composite": {
+    "actions": [
+      "Normal position sizing",
+      "Standard stop-loss levels",
+      "New position entries allowed",
+      "Monitor for deterioration in leading indicators"
+    ],
+    "component_scores": {
+      "bearish_signal": {
+        "data_available": true,
+        "effective_weight": 0.15,
+        "label": "Bearish Signal Status",
+        "score": 80,
+        "weight": 0.15,
+        "weighted_contribution": 12.0
+      },
+      "breadth_level_trend": {
+        "data_available": true,
+        "effective_weight": 0.25,
+        "label": "Current Breadth Level & Trend",
+        "score": 72,
+        "weight": 0.25,
+        "weighted_contribution": 18.0
+      },
+      "cycle_position": {
+        "data_available": true,
+        "effective_weight": 0.2,
+        "label": "Peak/Trough Cycle Position",
+        "score": 60,
+        "weight": 0.2,
+        "weighted_contribution": 12.0
+      },
+      "divergence": {
+        "data_available": true,
+        "effective_weight": 0.1,
+        "label": "S&P 500 vs Breadth Divergence",
+        "score": 50,
+        "weight": 0.1,
+        "weighted_contribution": 5.0
+      },
+      "historical_percentile": {
+        "data_available": true,
+        "effective_weight": 0.1,
+        "label": "Historical Percentile",
+        "score": 55,
+        "weight": 0.1,
+        "weighted_contribution": 5.5
+      },
+      "ma_crossover": {
+        "data_available": true,
+        "effective_weight": 0.2,
+        "label": "8MA vs 200MA Crossover",
+        "score": 68,
+        "weight": 0.2,
+        "weighted_contribution": 13.6
+      }
+    },
+    "composite_score": 66.1,
+    "data_quality": {
+      "available_count": 6,
+      "label": "Complete (6/6 components)",
+      "missing_components": [],
+      "total_components": 6
+    },
+    "excluded_components": [],
+    "exposure_guidance": "75-90%",
+    "guidance": "Above-average breadth. Normal operations with standard risk management.",
+    "strongest_health": {
+      "component": "bearish_signal",
+      "label": "Bearish Signal Status",
+      "score": 80
+    },
+    "weakest_health": {
+      "component": "divergence",
+      "label": "S&P 500 vs Breadth Divergence",
+      "score": 50
+    },
+    "zone": "Healthy",
+    "zone_color": "blue"
+  },
+  "data_provenance": {
+    "adjusted": false,
+    "as_of": "2026-01-14T21:00:00+00:00",
+    "corporate_actions_handled": false,
+    "endpoint": "market-regime-breadth-component-fixture",
+    "point_in_time": false,
+    "provider": "fictional-fixture",
+    "retrieved_at": "2026-01-15T13:08:00+00:00",
+    "run_id": "fictional-market-regime-daily-run-001",
+    "schema_version": "1.0",
+    "scope": "fictional component fixture only; provider fetch not executed",
+    "survivorship_free": false,
+    "timezone": "America/New_York"
+  },
+  "metadata": {
+    "as_of": "2026-01-14T21:00:00+00:00",
+    "data_mode": "fictional offline component fixture",
+    "generated_at": "2026-01-15T13:08:00+00:00"
+  },
+  "provenance": {
+    "execution_mode": "native_api",
+    "fixture_boundaries": [
+      "provider fetch not executed",
+      "individual component calculators not executed",
+      "live API failure not exercised"
+    ],
+    "native_surface": "scorer.calculate_composite_score + report_generator.generate_json_report"
+  },
+  "schema_version": 1
+}

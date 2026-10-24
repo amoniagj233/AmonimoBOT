@@ -1,0 +1,66 @@
+{
+  "cohorts": [
+    {
+      "data_quality_flag_counts": {
+        "SHORT_HISTORY_LT_260_BARS": 1
+      },
+      "group": {
+        "catalyst.label": "EARNINGS_REVALUATION",
+        "direction": "UP",
+        "technical_context.close_quality": "MID_CLOSE",
+        "technical_context.pattern_label": "BASE_BREAKOUT"
+      },
+      "horizon": "5d",
+      "median_close_return_pct": 16.9231,
+      "median_directional_mae_pct": -1.5385,
+      "median_directional_mfe_pct": 19.2308,
+      "median_directional_return_pct": 16.9231,
+      "outcome_tag_counts": {
+        "STRONG_CONTINUATION": 1
+      },
+      "representative_symbols": [
+        "FICT20"
+      ],
+      "sample_size": 1,
+      "win_rate_directional": 1.0
+    }
+  ],
+  "group_by": [
+    "direction",
+    "catalyst.label",
+    "technical_context.pattern_label",
+    "technical_context.close_quality"
+  ],
+  "horizon": "5d",
+  "min_sample": 1,
+  "records_matured": 1,
+  "rule_candidates": [
+    {
+      "evidence": {
+        "data_quality_flag_counts": {
+          "SHORT_HISTORY_LT_260_BARS": 1
+        },
+        "median_directional_mae_pct": -1.5385,
+        "median_directional_return_pct": 16.9231,
+        "sample_size": 1,
+        "win_rate_directional": 1.0
+      },
+      "group": {
+        "catalyst.label": "EARNINGS_REVALUATION",
+        "direction": "UP",
+        "technical_context.close_quality": "MID_CLOSE",
+        "technical_context.pattern_label": "BASE_BREAKOUT"
+      },
+      "id": "up_earnings_revaluation_base_breakout_mid_close",
+      "required_review": [
+        "Inspect representative winner and failure charts.",
+        "Check year-by-year stability and market-regime splits.",
+        "Confirm realistic entry, slippage, liquidity, and borrow assumptions where applicable."
+      ],
+      "status": "candidate_for_review",
+      "thesis": "Continuation-favorable cohort; promote only after representative chart review and out-of-sample validation."
+    }
+  ],
+  "schema_version": "1.0",
+  "source_skill": "stockbee-20pct-study"
+}

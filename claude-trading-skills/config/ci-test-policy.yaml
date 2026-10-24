@@ -1,0 +1,71 @@
+schema_version: 1
+
+# Coverage is measured on executable code only. Test modules under */tests/*
+# are excluded from both per-skill and repository aggregates.
+aggregate_coverage:
+  target: 75
+  waiver: null
+
+coverage:
+  default_target: 70
+  tiers:
+    core-risk-math-state:
+      target: 85
+      skills:
+      - drawdown-circuit-breaker
+      - futures-position-sizer
+      - position-sizer
+      - trader-memory-core
+  waivers: {}
+
+# Runtime exceptions are data, not code. Every entry must carry a future
+# expiry, linked issue, and reason. There are currently no allowed failures.
+allowed_failures: {}
+
+matrix:
+  breakout-trade-planner:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  drawdown-circuit-breaker:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  earnings-trade-analyzer:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise session-aware earnings-calendar empty-response classification.
+  market-environment-analysis:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  market-top-detector:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  parabolic-short-trade-planner:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  theme-detector:
+    requirements:
+    - pandas-market-calendars==5.2.2
+    reason: Exercise the pinned shared cash-equity calendar contract.
+  breadth-chart-analyst:
+    requirements:
+    - opencv-python-headless
+    - pillow
+    reason: Install the image libraries the chart detectors and extractor import; versions come from uv.lock.
+  canslim-screener:
+    requirements:
+    - beautifulsoup4
+    - lxml
+    reason: Install the HTML parsing dependencies finviz_stock_client.py imports.
+  pair-trade-screener:
+    requirements:
+    - statsmodels>=0.14,<0.15
+    reason: Install the statistical runtime only for this dedicated CI row.
+  repo-scripts:
+    requirements:
+    - pyarrow
+    reason: Replay the strategy research parquet fixture; pyarrow version comes from uv.lock.

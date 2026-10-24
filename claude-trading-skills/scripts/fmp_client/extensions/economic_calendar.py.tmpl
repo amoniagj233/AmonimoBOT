@@ -1,0 +1,55 @@
+    def get_economic_calendar(self, from_date: str, to_date: str) -> list[dict]:
+        """Fetch the economic calendar for a date range (Issue #495 Batch A).
+
+        Mirrors the former hand-rolled ``fetch_economic_calendar`` in
+        ``economic-calendar-fetcher``: every failure raises ``ValueError``
+        (instead of the client's None + printed diagnostic), so the script's
+        caller keeps a single raise-face.
+
+        Wording is RE-DERIVED per failure class, not passed through from
+        ``_last_error``:
+        - HTTP 402 keeps the upgrade-required wording the tests pin
+          (``402|subscription|upgrade``);
+        - other HTTP failures raise ``API returned status code {code}``
+          (+ response body for context, redacted);
+        - transport failures raise ``Network error:`` (the pinned
+          ``test_transport_error_has_clear_network_message`` wording);
+        - a 200 payload that is not a list raises ``Unexpected API response
+          format: {type}``.
+        """
+        cache_key = f"economic_calendar_{from_date}_{to_date}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        url = "https://financialmodelingprep.com/stable/economic-calendar"
+        # quiet=True: the extension raises its own precise ValueError for
+        # every failure class, so the client's generic ERROR print is noise.
+        data = self._rate_limited_get(url, params={"from": from_date, "to": to_date}, quiet=True)
+
+        if data is None:
+            last_error = self._last_error or "unknown error"
+            if last_error.startswith("HTTP 402"):
+                body = last_error.split(" - ", 1)[1] if " - " in last_error else ""
+                raise ValueError(
+                    "FMP API returned 402 Payment Required: the Economic Calendar endpoint "
+                    "is not included in your current FMP subscription tier. Upgrade your plan "
+                    f"at https://financialmodelingprep.com/ to access this endpoint. "
+                    f"Details: {body}"
+                )
+            if last_error.startswith("HTTP "):
+                # `last_error[5:]` already embeds the redacted body, so append no body
+                # (keeps the pinned "API returned status code {code}" wording clean).
+                raise ValueError(f"API returned status code {last_error[5:]}")
+            # Transport failure: the client stores "request exception: <reason>".
+            if last_error.startswith("request exception: "):
+                reason = last_error[len("request exception: ") :]
+                raise ValueError(f"Network error: {reason}")
+            # Catch-all: neither HTTP-status nor transport (e.g. a data-hygiene
+            # failure inside the client); word it honestly.
+            raise ValueError(f"FMP request failed: {last_error}")
+
+        if not isinstance(data, list):
+            raise ValueError(f"Unexpected API response format: {type(data)}")
+
+        self.cache[cache_key] = data
+        return data

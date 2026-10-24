@@ -1,0 +1,62 @@
+name: Packaged deps nightly smoke
+
+# Scheduled clean-room smoke for issue #330 (report-only until the
+# follow-up promotion issue expires on 2026-10-15): for each executable
+# skill with third-party requirements, install ONLY the declared
+# dependencies in a fresh venv and import every required distribution.
+# PRs run the offline declaration check + golden smoke in ci.yml instead;
+# orchestration uses uv.lock; isolated standalone requirements installs are
+# intentionally unlocked compatibility probes, not project CI environments.
+# This run also executes the declarative per-skill smoke contracts from
+# check_skill_deps.SMOKE_CONTRACTS via scripts/smoke_contracts_runner.py
+# (issue #349 checklist item 2) and that runner exits nonzero on failure;
+# `continue-on-error` stays true because the 2-week green-run precondition
+# (checklist item 1, complete from 2026-09-27) is observed before the
+# fail-closed flip in the follow-up PR (checklist item 4).
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Clean-room import smoke (report-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.9"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.10"
+      - name: Offline dependency declaration report
+        run: >
+          uv run --isolated --no-project --with packaging --with pyyaml
+          python scripts/check_skill_deps.py report > deps-report.json
+
+      - name: Clean-room venv smoke per skill
+        shell: bash
+        run: |
+          uv run --isolated --no-project --with packaging \
+            python scripts/smoke_contracts_runner.py --output deps-nightly-smoke.json
+
+      - name: Upload nightly smoke evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packaged-deps-nightly-report
+          path: |
+            deps-report.json
+            deps-nightly-smoke.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,75 @@
+    def get_company_screener(
+        self, market_cap_min: int = 1000000000, limit: int = 100
+    ) -> list[dict]:
+        """Get stocks meeting market-cap criteria (/stable company-screener).
+
+        Mirrors the former hand-rolled ``FMPDataClient.get_company_screener``
+        in ``institutional-flow-tracker``: returns a list (empty when the
+        payload is not a list) instead of raising.
+        """
+        data = self._institutional_get(
+            "company-screener", marketCapMoreThan=market_cap_min, limit=limit
+        )
+        return data if isinstance(data, list) else []
+
+    def get_13f_summary(self, symbol: str, year: int, quarter: int) -> Optional[dict]:
+        """Get the aggregate 13F positions summary for one symbol/quarter.
+
+        Returns the first row of the payload (list of 0 or 1 dicts), or
+        ``PyNone``-free None when unavailable — the shape both
+        ``track_institutional_flow.py`` and ``analyze_single_stock.py``
+        consumed from the hand-rolled ``_get``.
+        """
+        data = self._institutional_get(
+            "institutional-ownership/symbol-positions-summary",
+            symbol=symbol,
+            year=year,
+            quarter=quarter,
+        )
+        if isinstance(data, list) and data:
+            return data[0]
+        return None
+
+    def get_institutional_holders(
+        self, symbol: str, year: int, quarter: int, page: int = 0
+    ) -> Optional[list[dict]]:
+        """Get raw institutional-holder rows for one page (10 rows/page).
+
+        ``extract-analytics/holder`` sorted by position size. Raw rows are
+        returned un-normalized; both consuming scripts apply their own
+        ``normalize_holder`` and pagination window (pages 0-4 for
+        ``analyze_single_stock``). Returns None when unavailable, preserving
+        the former ``_get`` None-propagation the scripts branch on.
+        """
+        return self._institutional_get(
+            "institutional-ownership/extract-analytics/holder",
+            symbol=symbol,
+            year=year,
+            quarter=quarter,
+            page=page,
+        )
+
+    def get_company_profile(self, symbol: str) -> dict:
+        """Get the first /stable/profile row for one symbol (raw).
+
+        The consuming script adds its own ``mktCap`` alias shim, so this
+        returns the raw profile dict (empty when unavailable) exactly as
+        the hand-rolled ``_get("profile", symbol=...)`` did.
+        """
+        data = self._institutional_get("profile", symbol=symbol)
+        if isinstance(data, list) and data:
+            return data[0]
+        return {}
+
+    # -- internals -----------------------------------------------------------
+
+    def _institutional_get(self, path: str, **params) -> Optional[dict]:
+        """GET ``{STABLE_BASE}/{path}`` under /stable (apikey header auth).
+
+        The generated core ``BASE_URL`` points at the v3 base, and these
+        endpoints have no v3 name to rewrite, so the stable base is
+        hardcoded here (the same pattern ``extensions/parabolic.py.tmpl``
+        uses for ``profile-bulk``).
+        """
+        url = f"https://financialmodelingprep.com/stable/{path}"
+        return self._rate_limited_get(url, params=params, quiet=True)

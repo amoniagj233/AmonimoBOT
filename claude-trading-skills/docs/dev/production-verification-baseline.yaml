@@ -1,0 +1,470 @@
+schema_version: 1
+audit:
+  baseline_commit: 7a5457ff404bc16a3764db7d16494db84144baf9  # pragma: allowlist secret
+  assessed_at: '2026-08-09'
+  scope: Conservative metadata backfill for production skills present at the baseline commit.
+external_release_gates:
+  open_high_severity_issues:
+    status: not_evaluated
+    checked_at: null
+    query: GET /repos/tradermonty/claude-trading-skills/issues?state=open; exclude pull requests and triage P0/high-severity applicability per skill
+    rationale: Live issue state is intentionally not frozen into an eight-axis metadata value; check it before a production release decision.
+profiles:
+  executable_workflow_trading:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_verified
+        rationale: Test presence or a green aggregate run does not prove every executable script has happy, boundary, error-path, and fail-closed coverage.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/293
+      workflow_contract:
+        value: not_verified
+        rationale: The skill is referenced by a canonical workflow, but no complete skill handoff contract audit is recorded.
+        evidence: []
+      end_to_end_replay:
+        value: not_verified
+        rationale: Canonical workflow replay evidence is not complete.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/294
+      data_provenance:
+        value: not_verified
+        rationale: No per-skill audit proves output schemas record data sources and as-of timestamps on every applicable path.
+        evidence: []
+      financial_logic_review:
+        value: not_verified
+        rationale: No per-skill financial-logic audit proves validation of money, price, quantity, date, unit, currency, non-finite, negative, and extreme inputs.
+        evidence: []
+      empirical_validation:
+        value: not_verified
+        rationale: No per-skill empirical validation record is pinned to this baseline commit.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+  executable_standalone_trading:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_verified
+        rationale: Test presence or a green aggregate run does not prove every executable script has happy, boundary, error-path, and fail-closed coverage.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/293
+      workflow_contract:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow in skills-index.yaml.
+        evidence: []
+      end_to_end_replay:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow, so workflow replay does not apply.
+        evidence: []
+      data_provenance:
+        value: not_verified
+        rationale: No per-skill audit proves output schemas record data sources and as-of timestamps on every applicable path.
+        evidence: []
+      financial_logic_review:
+        value: not_verified
+        rationale: No per-skill financial-logic audit proves validation of money, price, quantity, date, unit, currency, non-finite, negative, and extreme inputs.
+        evidence: []
+      empirical_validation:
+        value: not_verified
+        rationale: No per-skill empirical validation record is pinned to this baseline commit.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+  knowledge_standalone_trading:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_applicable
+        rationale: The skill has no executable Python helper scripts under skills/<id>/scripts/.
+        evidence: []
+      workflow_contract:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow in skills-index.yaml.
+        evidence: []
+      end_to_end_replay:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow, so workflow replay does not apply.
+        evidence: []
+      data_provenance:
+        value: not_verified
+        rationale: No per-skill audit proves output schemas record data sources and as-of timestamps on every applicable path.
+        evidence: []
+      financial_logic_review:
+        value: not_verified
+        rationale: No per-skill financial-logic audit proves validation of money, price, quantity, date, unit, currency, non-finite, negative, and extreme inputs.
+        evidence: []
+      empirical_validation:
+        value: not_verified
+        rationale: No per-skill empirical validation record is pinned to this baseline commit.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+  meta_workflow:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_verified
+        rationale: Test presence or a green aggregate run does not prove every executable script has happy, boundary, error-path, and fail-closed coverage.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/293
+      workflow_contract:
+        value: not_verified
+        rationale: The skill is referenced by a canonical workflow, but no complete skill handoff contract audit is recorded.
+        evidence: []
+      end_to_end_replay:
+        value: not_verified
+        rationale: Canonical workflow replay evidence is not complete.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/294
+      data_provenance:
+        value: not_applicable
+        rationale: This repository-maintenance skill does not consume or emit market-data claims requiring source/as-of provenance.
+        evidence: []
+      financial_logic_review:
+        value: not_applicable
+        rationale: This repository-maintenance skill contains no trading financial logic.
+        evidence: []
+      empirical_validation:
+        value: not_applicable
+        rationale: This repository-maintenance skill makes no predictive or performance claim requiring empirical validation.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+  meta_standalone:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_verified
+        rationale: Test presence or a green aggregate run does not prove every executable script has happy, boundary, error-path, and fail-closed coverage.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/293
+      workflow_contract:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow in skills-index.yaml.
+        evidence: []
+      end_to_end_replay:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow, so workflow replay does not apply.
+        evidence: []
+      data_provenance:
+        value: not_verified
+        rationale: No per-skill audit proves output schemas record data sources and as-of timestamps on every applicable path.
+        evidence: []
+      financial_logic_review:
+        value: not_verified
+        rationale: No per-skill financial-logic audit proves validation of money, price, quantity, date, unit, currency, non-finite, negative, and extreme inputs.
+        evidence: []
+      empirical_validation:
+        value: not_applicable
+        rationale: This repository-maintenance skill makes no predictive or performance claim requiring empirical validation.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+  meta_data_standalone:
+    axes:
+      instruction_contract:
+        value: not_verified
+        rationale: Legacy production status did not retain a per-skill, commit-pinned instruction-contract audit.
+        evidence: []
+      unit_tests:
+        value: not_verified
+        rationale: Test presence or a green aggregate run does not prove every executable script has happy, boundary, error-path, and fail-closed coverage.
+        evidence:
+        - issue: https://github.com/tradermonty/claude-trading-skills/issues/293
+      workflow_contract:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow in skills-index.yaml.
+        evidence: []
+      end_to_end_replay:
+        value: not_applicable
+        rationale: The skill is not referenced by a canonical workflow, so workflow replay does not apply.
+        evidence: []
+      data_provenance:
+        value: not_verified
+        rationale: No per-skill audit proves output schemas record data sources and as-of timestamps on every applicable path.
+        evidence: []
+      financial_logic_review:
+        value: not_verified
+        rationale: No per-skill financial-logic audit proves validation of money, price, quantity, date, unit, currency, non-finite, negative, and extreme inputs.
+        evidence: []
+      empirical_validation:
+        value: not_applicable
+        rationale: This repository-maintenance skill makes no predictive or performance claim requiring empirical validation.
+        evidence: []
+      security_review:
+        value: not_verified
+        rationale: Repository SAST and secret scans are not a substitute for a per-skill security review and live high-severity issue check.
+        evidence:
+        - path: .github/workflows/ci.yml
+          job: security
+skills:
+- id: backtest-expert
+  profile: executable_workflow_trading
+- id: breadth-chart-analyst
+  profile: executable_standalone_trading
+- id: breakout-trade-planner
+  profile: executable_workflow_trading
+- id: canslim-screener
+  profile: executable_workflow_trading
+- id: contrarian-setup-gate
+  profile: executable_workflow_trading
+- id: cot-contrarian-detector
+  profile: executable_workflow_trading
+- id: data-quality-checker
+  profile: meta_standalone
+- id: dividend-growth-pullback-screener
+  profile: executable_workflow_trading
+- id: downtrend-duration-analyzer
+  profile: executable_standalone_trading
+- id: drawdown-circuit-breaker
+  profile: executable_workflow_trading
+- id: dual-axis-skill-reviewer
+  profile: meta_workflow
+- id: earnings-calendar
+  profile: meta_data_standalone
+- id: earnings-trade-analyzer
+  profile: executable_workflow_trading
+- id: economic-calendar-fetcher
+  profile: meta_data_standalone
+- id: edge-candidate-agent
+  profile: executable_workflow_trading
+- id: edge-concept-synthesizer
+  profile: executable_standalone_trading
+- id: edge-hint-extractor
+  profile: executable_workflow_trading
+- id: edge-pipeline-orchestrator
+  profile: executable_standalone_trading
+- id: edge-signal-aggregator
+  profile: executable_standalone_trading
+- id: edge-strategy-designer
+  profile: executable_standalone_trading
+- id: edge-strategy-reviewer
+  profile: executable_standalone_trading
+- id: exposure-coach
+  profile: executable_workflow_trading
+- id: finviz-screener
+  profile: executable_standalone_trading
+- id: ftd-detector
+  profile: executable_standalone_trading
+- id: futures-position-sizer
+  profile: executable_workflow_trading
+- id: ibd-distribution-day-monitor
+  profile: executable_standalone_trading
+- id: institutional-flow-tracker
+  profile: executable_standalone_trading
+- id: kanchi-dividend-review-monitor
+  profile: executable_workflow_trading
+- id: kanchi-dividend-sop
+  profile: executable_workflow_trading
+- id: kanchi-dividend-us-tax-accounting
+  profile: executable_workflow_trading
+- id: macro-regime-detector
+  profile: executable_workflow_trading
+  overrides:
+    workflow_contract:
+      value: passed
+      rationale: Multi-asset step 1 validates fixture component inputs and executes native scoring, regime classification, consistency checks, and reporting before the downstream theme contract validates the regime handoff. Provider fetches and component calculator histories are not executed; this step does not implement a cash-priority halt.
+      evidence:
+      - command: python3 scripts/validate_skills_index.py --strict-metadata --strict-workflows; exit 0
+      - workflows: workflows/market-regime-daily.yaml; workflows/multi-asset-opportunity-daily.yaml
+      - spec: examples/workflows/multi-asset-opportunity-daily/replay.yaml
+      - schema: examples/workflows/multi-asset-opportunity-daily/replay-contract.schema.json
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py; scripts/tests/test_workflow_replay.py; scripts/tests/test_workflow_replay_trade_memory.py
+    end_to_end_replay:
+      value: passed
+      rationale: Multi-asset step 1 executes native_api composite scoring, regime classification, consistency checks, and JSON reporting from fixture component results in both replay variants. Provider fetches and component calculator histories are not executed.
+      evidence:
+      - command: python3 scripts/workflow_replay.py check; exit 0; aggregate workflow coverage 11/11 (not per-skill native coverage)
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py (18 passed); test_workflow_replay.py frozen 11/11 set; test_workflow_replay_trade_memory.py
+      - execution: scripts/workflow_replay.py _multi_macro_regime; native_api; skills/macro-regime-detector/scripts/scorer.py and report_generator.py
+      - spec + schema: examples/workflows/multi-asset-opportunity-daily/replay.yaml with replay-contract.schema.json and both golden trees
+- id: market-breadth-analyzer
+  profile: executable_workflow_trading
+- id: market-environment-analysis
+  profile: executable_workflow_trading
+- id: market-news-analyst
+  profile: knowledge_standalone_trading
+  overrides:
+    workflow_contract:
+      value: not_verified
+      rationale: The skill is referenced by a canonical workflow, but no complete skill handoff contract audit is recorded.
+      evidence: []
+    end_to_end_replay:
+      value: not_verified
+      rationale: Canonical workflow replay evidence is not complete.
+      evidence:
+      - issue: https://github.com/tradermonty/claude-trading-skills/issues/294
+- id: market-top-detector
+  profile: executable_workflow_trading
+- id: news-reaction-failure-analyzer
+  profile: executable_workflow_trading
+- id: options-strategy-advisor
+  profile: executable_standalone_trading
+- id: pair-trade-screener
+  profile: executable_standalone_trading
+- id: parabolic-short-trade-planner
+  profile: executable_standalone_trading
+- id: pead-screener
+  profile: executable_workflow_trading
+- id: portfolio-manager
+  profile: executable_workflow_trading
+- id: position-sizer
+  profile: executable_workflow_trading
+  overrides:
+    workflow_contract:
+      value: passed
+      rationale: Sizing handoff is executed natively per hypothesis card with FX research-only rejection and a card-id safety guard.
+      evidence:
+      - command: python3 scripts/validate_skills_index.py --strict-metadata --strict-workflows; exit 0
+      - workflows: workflows/multi-asset-opportunity-daily.yaml; workflows/stockbee-ep-daily.yaml; workflows/swing-opportunity-daily.yaml
+      - spec: examples/workflows/multi-asset-opportunity-daily/replay.yaml
+      - schema: examples/workflows/multi-asset-opportunity-daily/replay-contract.schema.json
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py; scripts/tests/test_workflow_replay.py; scripts/tests/test_workflow_replay_trade_memory.py
+    end_to_end_replay:
+      value: passed
+      rationale: Multi-asset step 5 executes the native_cli position sizer for actionable cards using fictional entries, stops, and risk in both replay variants. Rejected cards are excluded and portfolio caps are fixture-enforced; this does not exercise live portfolio or broker integration.
+      evidence:
+      - command: python3 scripts/workflow_replay.py check; exit 0; aggregate workflow coverage 11/11 (not per-skill native coverage)
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py (18 passed); test_workflow_replay.py frozen 11/11 set; test_workflow_replay_trade_memory.py
+      - execution: scripts/workflow_replay.py _multi_position_size; native_cli; skills/position-sizer/scripts/position_sizer.py
+      - spec + schema: examples/workflows/multi-asset-opportunity-daily/replay.yaml with replay-contract.schema.json and both golden trees
+- id: pre-trade-discipline-gate
+  profile: executable_workflow_trading
+- id: scenario-analyzer
+  profile: knowledge_standalone_trading
+  overrides:
+    workflow_contract:
+      value: not_verified
+      rationale: The skill is referenced by a canonical workflow, but no complete skill handoff contract audit is recorded.
+      evidence: []
+    end_to_end_replay:
+      value: not_verified
+      rationale: Canonical workflow replay evidence is not complete.
+      evidence:
+      - issue: https://github.com/tradermonty/claude-trading-skills/issues/294
+- id: sector-analyst
+  profile: executable_workflow_trading
+- id: signal-postmortem
+  profile: executable_workflow_trading
+- id: skill-designer
+  profile: meta_standalone
+- id: skill-idea-miner
+  profile: meta_standalone
+- id: skill-integration-tester
+  profile: meta_standalone
+- id: stanley-druckenmiller-investment
+  profile: executable_workflow_trading
+- id: strategy-pivot-designer
+  profile: executable_standalone_trading
+- id: technical-analyst
+  profile: executable_workflow_trading
+- id: theme-detector
+  profile: executable_workflow_trading
+  overrides:
+    workflow_contract:
+      value: passed
+      rationale: Step 2 handoff is schema-validated in the multi-asset replay; the theme screen contract is also exercised by the swing replay; provider sweep is manual-fixture based (declared limitation).
+      evidence:
+      - command: python3 scripts/validate_skills_index.py --strict-metadata --strict-workflows; exit 0
+      - workflows: workflows/multi-asset-opportunity-daily.yaml; workflows/stockbee-20pct-study-daily.yaml; workflows/stockbee-ep-daily.yaml; workflows/swing-opportunity-daily.yaml
+      - spec: examples/workflows/multi-asset-opportunity-daily/replay.yaml
+      - schema: examples/workflows/multi-asset-opportunity-daily/replay-contract.schema.json
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py; scripts/tests/test_workflow_replay.py; scripts/tests/test_workflow_replay_trade_memory.py
+    end_to_end_replay:
+      value: passed
+      rationale: Multi-asset step 2 and the swing theme step replay manual_contract fixtures with schema and handoff validation. Native theme screening, ETF scanning, FINVIZ/uptrend clients, and theme scoring are not executed. This evidence establishes fixture-contract replay only; optional skill references in other workflows do not establish native execution.
+      evidence:
+      - command: python3 scripts/workflow_replay.py check; exit 0; aggregate workflow coverage 11/11 (not per-skill native coverage)
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py (18 passed); test_workflow_replay.py frozen 11/11 set; test_workflow_replay_trade_memory.py
+      - execution: scripts/workflow_replay.py _multi_theme and _swing_theme; manual_contract; examples/workflows/swing-opportunity-daily/replay.yaml
+      - spec + schema: examples/workflows/multi-asset-opportunity-daily/replay.yaml with replay-contract.schema.json and both golden trees
+- id: trade-hypothesis-ideator
+  profile: executable_workflow_trading
+  overrides:
+    workflow_contract:
+      value: passed
+      rationale: Ideator pass1/pass2 native CLI runs inside the multi-asset replay with input-bundle validation and exact decision-coverage checks.
+      evidence:
+      - command: python3 scripts/validate_skills_index.py --strict-metadata --strict-workflows; exit 0
+      - workflows: workflows/multi-asset-opportunity-daily.yaml
+      - spec: examples/workflows/multi-asset-opportunity-daily/replay.yaml
+      - schema: examples/workflows/multi-asset-opportunity-daily/replay-contract.schema.json
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py; scripts/tests/test_workflow_replay.py; scripts/tests/test_workflow_replay_trade_memory.py
+    end_to_end_replay:
+      value: passed
+      rationale: Multi-asset step 4 is composite native_cli plus manual_contract in both replay variants. Native ideator pass1/pass2 consume a fixture bundle bound to upstream artifacts by SHA-256; hypothesis accept/reject decisions are supplied human-gate fixtures, not autonomous decisions.
+      evidence:
+      - command: python3 scripts/workflow_replay.py check; exit 0; aggregate workflow coverage 11/11 (not per-skill native coverage)
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py (18 passed); test_workflow_replay.py frozen 11/11 set; test_workflow_replay_trade_memory.py
+      - execution: scripts/workflow_replay.py _multi_hypotheses; composite native_cli + manual_contract; skills/trade-hypothesis-ideator/scripts/run_hypothesis_ideator.py
+      - spec + schema: examples/workflows/multi-asset-opportunity-daily/replay.yaml with replay-contract.schema.json and both golden trees
+- id: trader-memory-core
+  profile: executable_workflow_trading
+  overrides:
+    workflow_contract:
+      value: passed
+      rationale: The multi-asset registration handoff executes native thesis_ingest.ingest and thesis_store.link_report, validates the actionable/rejected partition, and verifies that registered theses remain in IDEA status. Other replayed workflows include schema-validated manual-contract handoffs, such as the stockbee-fluency-loop and stockbee-20pct-study-daily lesson logs; those fixtures do not execute the native trader-memory-core append API.
+      evidence:
+      - command: python3 scripts/validate_skills_index.py --strict-metadata --strict-workflows; exit 0
+      - workflows: workflows/core-portfolio-weekly.yaml; workflows/kanchi-dividend-weekly.yaml; workflows/monthly-performance-review.yaml; workflows/multi-asset-opportunity-daily.yaml; workflows/shapiro-contrarian.yaml; workflows/stockbee-20pct-study-daily.yaml; workflows/stockbee-ep-daily.yaml; workflows/stockbee-fluency-loop.yaml; workflows/swing-opportunity-daily.yaml; workflows/trade-memory-loop.yaml
+      - spec: examples/workflows/multi-asset-opportunity-daily/replay.yaml
+      - schema: examples/workflows/multi-asset-opportunity-daily/replay-contract.schema.json
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py; scripts/tests/test_workflow_replay.py; scripts/tests/test_workflow_replay_trade_memory.py
+    end_to_end_replay:
+      value: passed
+      rationale: Multi-asset step 6 combines manual_contract registration decisions with native_api thesis_ingest.ingest and thesis_store.link_report on temporary state in both replay variants; stored theses remain IDEA. Stockbee fluency and 20pct-study lesson logs are manual_contract fixtures without native append execution. The separate trade-memory-loop includes native persistence within its composite lesson step.
+      evidence:
+      - command: python3 scripts/workflow_replay.py check; exit 0; aggregate workflow coverage 11/11 (not per-skill native coverage)
+      - tests: scripts/tests/test_workflow_replay_multi_asset.py (18 passed); test_workflow_replay.py frozen 11/11 set; test_workflow_replay_trade_memory.py
+      - execution: scripts/workflow_replay.py _multi_register; composite manual_contract + native_api; skills/trader-memory-core/scripts/thesis_ingest.py and thesis_store.py
+      - spec + schema: examples/workflows/multi-asset-opportunity-daily/replay.yaml with replay-contract.schema.json and both golden trees
+- id: trading-skills-navigator
+  profile: meta_standalone
+- id: uptrend-analyzer
+  profile: executable_workflow_trading
+- id: us-market-bubble-detector
+  profile: executable_standalone_trading
+- id: us-stock-analysis
+  profile: knowledge_standalone_trading
+- id: value-dividend-screener
+  profile: executable_workflow_trading
+- id: vcp-screener
+  profile: executable_workflow_trading
+- id: weekly-performance-digest
+  profile: executable_standalone_trading

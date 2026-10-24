@@ -1,0 +1,55 @@
+workflow_id: stockbee-20pct-study-daily
+sample_type: full-path
+status: completed
+completed_steps:
+- 1
+- 2
+- 3
+- 4
+- 5
+required_steps_not_executed: []
+illustrative: true
+generated_by: scripts/workflow_replay.py generate
+prompt: prompt.md
+network_policy: offline-input-required
+optional_steps_skipped: []
+artifacts:
+- step: 1
+  artifact_id: twenty_pct_mover_events
+  skill: stockbee-20pct-study
+  execution_mode: native_cli
+  files:
+    canonical: 01_twenty_pct_mover_events.json
+    state: 01_twenty_pct_events.jsonl
+- step: 2
+  artifact_id: classified_event_study
+  skill: stockbee-20pct-study
+  execution_mode: native_cli
+  files:
+    canonical: 02_classified_event_study.json
+    state: 02_twenty_pct_events.jsonl
+- step: 3
+  artifact_id: matured_event_outcomes
+  skill: stockbee-20pct-study
+  execution_mode: native_cli
+  files:
+    canonical: 03_matured_event_outcomes.json
+    state: 03_twenty_pct_events.jsonl
+- step: 4
+  artifact_id: edge_hints_yaml
+  skill: stockbee-20pct-study
+  execution_mode: native_cli
+  files:
+    canonical: 04_edge_hints.yaml
+- step: 4
+  artifact_id: twenty_pct_cohort_summary
+  skill: stockbee-20pct-study
+  execution_mode: native_cli
+  files:
+    canonical: 04_twenty_pct_cohort_summary.json
+- step: 5
+  artifact_id: accepted_lessons_log
+  skill: trader-memory-core
+  execution_mode: manual_contract
+  files:
+    canonical: 05_accepted_lessons_log.yaml

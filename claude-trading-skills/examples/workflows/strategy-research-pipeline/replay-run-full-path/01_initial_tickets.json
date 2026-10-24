@@ -1,0 +1,166 @@
+[
+  {
+    "date": "2026-08-28",
+    "description": "Auto-detected Gap-Up Continuation candidate for ALFA.",
+    "entry": {
+      "conditions": [
+        "gap >= 4%",
+        "rel_volume >= 2.0",
+        "close_pos >= 0.5",
+        "close > ma50"
+      ],
+      "trend_filter": [
+        "price > sma_200",
+        "price > sma_50",
+        "sma_50 > sma_200"
+      ]
+    },
+    "entry_family": "gap_up_continuation",
+    "holding_horizon": "20D",
+    "hypothesis": "if earnings-style gap-up with strong close and volume confirmation, then 10-40 day drift remains positive",
+    "hypothesis_type": "earnings_drift",
+    "id": "edge_auto_gap_alfa_20260828",
+    "market_context": {
+      "avg_pair_corr_20": 0.4294,
+      "pct_above_ma50": 1.0,
+      "regime": "RiskOn",
+      "vol_trend": 1.6758
+    },
+    "mechanism_tag": "structure",
+    "name": "Gap-Up Continuation ALFA 20260828",
+    "observation": {
+      "close": 130.3724,
+      "close_pos": 0.832,
+      "gap_pct": 11.608,
+      "matched_hints": [],
+      "priority_score": 95.08,
+      "rel_volume": 2.653,
+      "rs_rank_pct": 1.0,
+      "symbol": "ALFA"
+    },
+    "priority_score": 95.08,
+    "rank": 2,
+    "rationale": [
+      "Use regime-conditioned signal to avoid forcing long exposure in weak environments.",
+      "Prioritize candidates with liquidity and participation confirmation."
+    ],
+    "regime": "RiskOn",
+    "rejection_criteria": [
+      "Expected value negative after costs",
+      "Phase I gate failure or unstable split behavior",
+      "Regime-dependent performance concentrated in low-frequency environments"
+    ],
+    "signal_definition": {
+      "conditions": [
+        "gap >= 4%",
+        "rel_volume >= 2.0",
+        "close_pos >= 0.5",
+        "close > ma50"
+      ],
+      "entry_family": "gap_up_continuation",
+      "trend_filter": [
+        "price > sma_200",
+        "price > sma_50",
+        "sma_50 > sma_200"
+      ]
+    },
+    "test_spec": {
+      "cost_model": {
+        "commission_per_share": 0.0,
+        "slippage_bps": 5
+      },
+      "entry_timing": "next_open",
+      "hold_days": [
+        5,
+        20,
+        60
+      ],
+      "period": "2016-01-01 to latest",
+      "validation_method": "full_sample"
+    },
+    "validation": {
+      "method": "full_sample"
+    }
+  },
+  {
+    "date": "2026-08-28",
+    "description": "Auto-detected Pivot Breakout candidate for ALFA.",
+    "entry": {
+      "conditions": [
+        "close > high20_prev",
+        "rel_volume >= 1.5",
+        "close > ma50 > ma200"
+      ],
+      "trend_filter": [
+        "price > sma_200",
+        "price > sma_50",
+        "sma_50 > sma_200"
+      ]
+    },
+    "entry_family": "pivot_breakout",
+    "holding_horizon": "20D",
+    "hypothesis": "if breakout above prior 20-day high with elevated relative volume, then 5-20 day follow-through returns remain positive",
+    "hypothesis_type": "breakout",
+    "id": "edge_auto_vcp_alfa_20260828",
+    "market_context": {
+      "avg_pair_corr_20": 0.4294,
+      "pct_above_ma50": 1.0,
+      "regime": "RiskOn",
+      "vol_trend": 1.6758
+    },
+    "mechanism_tag": "behavior",
+    "name": "Pivot Breakout ALFA 20260828",
+    "observation": {
+      "close": 130.3724,
+      "close_pos": 0.832,
+      "gap_pct": 11.608,
+      "matched_hints": [],
+      "priority_score": 96.01,
+      "rel_volume": 2.653,
+      "rs_rank_pct": 1.0,
+      "symbol": "ALFA"
+    },
+    "priority_score": 96.01,
+    "rank": 1,
+    "rationale": [
+      "Use regime-conditioned signal to avoid forcing long exposure in weak environments.",
+      "Prioritize candidates with liquidity and participation confirmation."
+    ],
+    "regime": "RiskOn",
+    "rejection_criteria": [
+      "Expected value negative after costs",
+      "Phase I gate failure or unstable split behavior",
+      "Regime-dependent performance concentrated in low-frequency environments"
+    ],
+    "signal_definition": {
+      "conditions": [
+        "close > high20_prev",
+        "rel_volume >= 1.5",
+        "close > ma50 > ma200"
+      ],
+      "entry_family": "pivot_breakout",
+      "trend_filter": [
+        "price > sma_200",
+        "price > sma_50",
+        "sma_50 > sma_200"
+      ]
+    },
+    "test_spec": {
+      "cost_model": {
+        "commission_per_share": 0.0,
+        "slippage_bps": 5
+      },
+      "entry_timing": "next_open",
+      "hold_days": [
+        5,
+        20,
+        60
+      ],
+      "period": "2016-01-01 to latest",
+      "validation_method": "full_sample"
+    },
+    "validation": {
+      "method": "full_sample"
+    }
+  }
+]

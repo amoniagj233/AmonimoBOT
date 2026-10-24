@@ -1,0 +1,45 @@
+schema_version: 1
+
+# This file is the single authority for the shared exchange-calendar runtime.
+# pandas-market-calendars 5.2.3 and 5.2.4 advertise Python 3.8+ support but
+# fail during import on Python 3.9 because they evaluate ``pd.Timestamp | None``.
+requirement: pandas-market-calendars==5.2.2
+optional_extra: market-calendar
+
+consumers:
+  - breakout-trade-planner
+  - drawdown-circuit-breaker
+  - earnings-trade-analyzer
+  - market-environment-analysis
+  - market-top-detector
+  - parabolic-short-trade-planner
+  - theme-detector
+
+# Existing imports needed for a true standalone ``--help`` smoke. The shared
+# calendar pin remains the only requirement common to every consumer.
+# Entries are plain requirement strings, or {requirement, optional} mappings
+# whose reason is rendered as a ``# optional:`` marker (see issue #330).
+additional_requirements:
+  drawdown-circuit-breaker:
+    - pyyaml>=6.0
+  earnings-trade-analyzer:
+    - requests>=2.31.0
+  market-top-detector:
+    - requests>=2.31.0
+    - requirement: yfinance>=0.2.0
+      optional: FMP success path never depends on it; fallback returns None
+  parabolic-short-trade-planner:
+    - requests>=2.31.0
+  theme-detector:
+    - requirement: finvizfinance>=1.0.0
+      optional: FINVIZ client degrades to static config (HAS_FINVIZFINANCE)
+    - numpy>=1.26.0
+    - pandas>=2.0.0
+    - pyyaml>=6.0
+    - requests>=2.31.0
+    - requirement: yfinance>=0.2.0
+      optional: ETF scanner falls back to FMP/static paths (HAS_YFINANCE)
+
+example_mirrors:
+  - examples/weekly-trade-strategy/.claude/skills/market-environment-analysis
+  - examples/weekly-trade-strategy/skills/market-environment-analysis

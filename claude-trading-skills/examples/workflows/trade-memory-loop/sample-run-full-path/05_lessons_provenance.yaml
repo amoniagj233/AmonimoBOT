@@ -1,0 +1,14 @@
+human_approved: true
+variant: full-path
+decision: research_rule
+source_sha256:
+  postmortem_findings: 3272ce966dcbad845619cfbbf53afd3e616286b00d2bf785544862a84e9c7c18  # pragma: allowlist secret
+  backtest_validation: 502773d91525e5a82496edba833ada40138c2e5b85b26f281a425d6146d885cd  # pragma: allowlist secret
+execution_mode: composite
+components:
+- native_api
+- manual_contract
+atomicity_scope:
+  individual_state_files: atomic replace by trader-memory-core
+  temporary_state: discarded on replay failure
+  published_tree: transactional replacement by workflow replay harness

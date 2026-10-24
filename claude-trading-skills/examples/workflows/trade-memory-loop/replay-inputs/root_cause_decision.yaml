@@ -1,0 +1,9 @@
+human_approved: true
+thesis_id: th_exmpl_growth_20260108_a1b2
+expected_native_classification: TRUE_POSITIVE
+expected_source_sha256:
+  closed_thesis_record: 4120fc6de53b67d5d6884c794ce1dd45273e709556a383c29d983d15bc712c3a  # pragma: allowlist secret
+  realized_returns: 668e90078c21e633f4513935f771dc96038b37d0a709638145f3ef7eb3a9c51e  # pragma: allowlist secret
+  native_postmortem_record: 902e12a164ac173f0b2da25524bdfdca17c956dc409fe1d5075e00ee8c9f5feb  # pragma: allowlist secret
+classification: thesis_quality
+summary: The fictional outcome aligned with the written thesis; this human fixture makes no causal inference.
