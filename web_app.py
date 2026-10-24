@@ -1720,6 +1720,11 @@ def sync_challenge_20_state():
                     ep = ml_brain.predict_symbol_ease(wsym, wrates, winfo, wtick)
                     w_atr = float(wrates['high'][-1] - wrates['low'][-1]) if wrates is not None and len(wrates) > 0 else 1.0
                     tp_info = ml_brain.predict_dynamic_tp(wsym, wrates, w_atr, "BUY", dollar_risk=w.get("est_risk", 0.85))
+                    
+                    perf = get_symbol_perf_summary(wsym)
+                    p_num = perf.get("priority_num", 3)
+                    is_p1 = (p_num == 1)
+
                     rankings.append({
                         "symbol": wsym,
                         "category": w.get("category", ""),
@@ -1730,13 +1735,17 @@ def sync_challenge_20_state():
                         "noise_ratio": ep["noise_ratio"],
                         "spread_friction": ep["spread_friction"],
                         "bandit_prob": ep["bandit_prob"],
-                        "rank_tag": ep["rank_tag"],
-                        "recommendation": ep["recommendation"],
+                        "rank_tag": "⭐ P1 FOCUS ACTIVE" if is_p1 else ep["rank_tag"],
+                        "recommendation": "PRIORITY 1 FOCUS: Top statistical edge." if is_p1 else f"Priority {p_num}: Paused by P1-only filter.",
                         "ml_tp_multiplier": tp_info["tp_multiplier"],
                         "ml_target_dollar": tp_info["target_dollar"],
-                        "ml_strategy": tp_info["strategy_name"]
+                        "ml_strategy": tp_info["strategy_name"],
+                        "priority_num": p_num,
+                        "is_p1": is_p1,
+                        "p1_status": "⭐ PRIORITY 1 — FOCUS (ELIGIBLE)" if is_p1 else f"⏸️ PRIORITY {p_num} (FILTERED OUT)"
                     })
-                rankings.sort(key=lambda x: x["ease_score"], reverse=True)
+                # Sort: Priority 1 first, then highest Ease Score
+                rankings.sort(key=lambda x: (x["is_p1"], x["ease_score"]), reverse=True)
                 state["ml_symbol_rankings"] = rankings
                 state["ml_summary"] = ml_brain.get_summary()
             except Exception as _ml_rank_err:
@@ -1760,6 +1769,17 @@ def check_and_execute_challenge_20(sym, bias, confidence_score, info, tick, atr,
 
         if sym in state.get("blacklisted_symbols", []):
             return {"executed": False, "message": f"{sym} is blacklisted (heavy contract risk)"}
+
+        # STRICT PRIORITY 1 — FOCUS ENFORCEMENT (User Mandate)
+        p1_only = state.get("priority_1_only", True)
+        if p1_only:
+            perf = get_symbol_perf_summary(sym)
+            p_num = perf.get("priority_num", 3)
+            if p_num != 1:
+                return {
+                    "executed": False,
+                    "message": f"ML/Risk Gate: {sym} blocked. Only PRIORITY 1 — FOCUS symbols allowed in $20 Challenge (Current: Priority {p_num})"
+                }
 
         active_pos = state.get("active_positions", [])
         if any(p.get("symbol") == sym for p in active_pos):
@@ -2631,9 +2651,10 @@ HTML_PAGE = """<!DOCTYPE html>
             <span class="text-2xl">🏆</span>
             <h2 class="text-xl font-black text-white tracking-wide">$20 Micro-Account Compounding Challenge</h2>
             <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-mono font-bold border border-amber-500/40">100% AUTOMATIC ONLY</span>
+            <span class="px-2 py-0.5 rounded-full bg-yellow-500/25 text-yellow-300 text-[11px] font-mono font-bold border border-yellow-500/50 flex items-center gap-1 shadow-sm">⭐ PRIORITY 1 — FOCUS ONLY: ENFORCED</span>
           </div>
           <p class="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Strict $20 capital protection protocol. Automatically trades <strong>only whitelisted micro-point instruments</strong> (Step Index, Vol 75, EURUSD, GBPUSD) with 88%–100% confluence, capping risk to strictly <strong>$1.00 (5.0%)</strong> per trade with asymmetric <strong>1:2.2 R:R (+$2.20 targets)</strong>. Heavy symbols like Crash 300 and BTC are strictly blacklisted.
+            Strict $20 capital protection protocol. Automatically trades <strong>strictly PRIORITY 1 — FOCUS instruments</strong> (currently <strong>Step Index</strong> with 75.0% historical win rate & +$2,260 net P&L) with 88%–100% confluence, capping risk to strictly <strong>$0.60–$1.00</strong> per trade with dynamic ML targets. Non-Priority-1 symbols are paused by risk gate.
           </p>
         </div>
 
@@ -3726,12 +3747,13 @@ HTML_PAGE = """<!DOCTYPE html>
         const activeSyms = new Set(activePositions.map(p => p.symbol));
         grid.innerHTML = data.whitelisted_symbols.map(w => {
           const inPos = activeSyms.has(w.symbol);
+          const isP1 = w.symbol === 'Step Index';
           return `
-            <div class="p-3 rounded-lg bg-slate-950/70 border ${inPos ? 'border-amber-500/50 shadow-sm shadow-amber-500/10' : 'border-slate-800'} flex items-center justify-between">
+            <div class="p-3 rounded-lg bg-slate-950/70 border ${isP1 ? 'border-amber-400/60 bg-amber-950/10 shadow-sm shadow-amber-500/20' : (inPos ? 'border-amber-500/50 shadow-sm shadow-amber-500/10' : 'border-slate-800 opacity-60')} flex items-center justify-between">
               <div>
                 <div class="flex items-center gap-2">
                   <span class="font-bold text-white text-xs font-mono">${w.symbol}</span>
-                  <span class="text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">${w.category}</span>
+                  ${isP1 ? '<span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">⭐ PRIORITY 1</span>' : '<span class="text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-500 font-mono">PRIORITY 2-4</span>'}
                 </div>
                 <div class="text-[10px] text-slate-400 font-mono mt-0.5">
                   Min: <span class="text-cyanaccent font-bold">${w.min_lot} lot</span> &bull; Risk: <span class="text-amber-400 font-bold">~$${w.est_risk.toFixed(2)}</span>
@@ -3742,11 +3764,15 @@ HTML_PAGE = """<!DOCTYPE html>
                   <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold animate-pulse">
                     IN POSITION
                   </span>
-                ` : `
-                  <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emeraldaccent border border-emerald-500/20 text-[10px] font-mono font-semibold">
-                    SCANNING (88-100%)
+                ` : (isP1 ? `
+                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emeraldaccent border border-emerald-500/40 text-[10px] font-mono font-bold shadow-sm shadow-emerald-500/20 animate-pulse">
+                    ⭐ ARMED FOR AUTO-EXECUTE
                   </span>
-                `}
+                ` : `
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px] font-mono font-semibold">
+                    ⏸️ PAUSED (P1 Rule Enforced)
+                  </span>
+                `)}
               </div>
             </div>
           `;

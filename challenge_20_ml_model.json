@@ -1,8 +1,8 @@
 {
   "version": "1.0-AdaptiveReinforcement",
-  "epochs_trained": 3,
-  "total_trades_analyzed": 3,
-  "cumulative_reward": 2.49,
+  "epochs_trained": 12,
+  "total_trades_analyzed": 12,
+  "cumulative_reward": 0.14,
   "feature_weights": {
     "trend_efficiency_ker": 0.4,
     "low_noise_ratio": 0.3,
@@ -12,8 +12,8 @@
   "symbol_bandit": {
     "Step Index": {
       "alpha": 5,
-      "beta": 1,
-      "total_trades": 4,
+      "beta": 4,
+      "total_trades": 7,
       "avg_rr": 2.2
     },
     "Volatility 75 Index": {
@@ -36,8 +36,8 @@
     },
     "Volatility 25 (1s) Index": {
       "alpha": 4,
-      "beta": 2,
-      "total_trades": 4,
+      "beta": 8,
+      "total_trades": 10,
       "avg_rr": 2.2
     }
   },
@@ -53,13 +53,13 @@
       0.4
     ],
     "NormalVol_Choppy": [
-      0.4404,
-      0.5,
-      0.25
+      0.1249,
+      0.192,
+      0.2125
     ],
     "NormalVol_Trending": [
       0.45,
-      0.967,
+      0.5938,
       0.65
     ],
     "HighVol_Expansion": [
@@ -70,5 +70,5 @@
   },
   "learning_rate": 0.15,
   "discount_factor": 0.9,
-  "last_updated": "2026-10-24 16:59:21 UTC"
+  "last_updated": "2026-10-24 17:18:10 UTC"
 }
