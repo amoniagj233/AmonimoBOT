@@ -22,6 +22,12 @@ CONFIG_FILE = Path(r"c:\Users\amoni\OneDrive\Desktop\DayTrade\auto_trade_config.
 MULTI_TP_FILE = Path(r"c:\Users\amoni\OneDrive\Desktop\DayTrade\multi_tp_groups.json")
 CHALLENGE_20_FILE = Path(r"c:\Users\amoni\OneDrive\Desktop\DayTrade\challenge_20_state.json")
 
+try:
+    from challenge_ml_brain import ml_brain
+except Exception as _ml_import_err:
+    ml_brain = None
+    print(f"Warning importing ml_brain: {_ml_import_err}")
+
 TICKER_SYMBOLS = [
     "BTCUSD",
     "Boom 1000 Index",
@@ -1683,6 +1689,13 @@ def sync_challenge_20_state():
                 elif cp.get("outcome") == "LOSS":
                     state["metrics"]["losses"] = state["metrics"].get("losses", 0) + 1
                 state["metrics"]["total_trades"] = state["metrics"].get("total_trades", 0) + 1
+                
+                # ML BRAIN: Autonomous Feedback Learning Step
+                if ml_brain:
+                    try:
+                        ml_brain.learn_from_trade(cp)
+                    except Exception as _ml_err:
+                        print(f"[ML BRAIN LEARN ERROR] {_ml_err}")
 
             tot = state["metrics"].get("total_trades", 0)
             wins = state["metrics"].get("wins", 0)
@@ -1694,6 +1707,40 @@ def sync_challenge_20_state():
         cur_bal = state.get("current_balance", 20.0)
         state["realized_profit"] = round(cur_bal - start_bal, 2)
         state["total_equity"] = round(cur_bal + total_floating, 2)
+
+        # Attach Live ML Ease Rankings & Summary
+        if ml_brain:
+            try:
+                rankings = []
+                for w in state.get("whitelisted_symbols", []):
+                    wsym = w["symbol"]
+                    winfo = mt5.symbol_info(wsym)
+                    wtick = mt5.symbol_info_tick(wsym)
+                    wrates = mt5.copy_rates_from_pos(wsym, mt5.TIMEFRAME_M15, 0, 30)
+                    ep = ml_brain.predict_symbol_ease(wsym, wrates, winfo, wtick)
+                    w_atr = float(wrates['high'][-1] - wrates['low'][-1]) if wrates is not None and len(wrates) > 0 else 1.0
+                    tp_info = ml_brain.predict_dynamic_tp(wsym, wrates, w_atr, "BUY", dollar_risk=w.get("est_risk", 0.85))
+                    rankings.append({
+                        "symbol": wsym,
+                        "category": w.get("category", ""),
+                        "min_lot": w.get("min_lot", 0.01),
+                        "est_risk": w.get("est_risk", 0.85),
+                        "ease_score": ep["ease_score"],
+                        "ker": ep["ker"],
+                        "noise_ratio": ep["noise_ratio"],
+                        "spread_friction": ep["spread_friction"],
+                        "bandit_prob": ep["bandit_prob"],
+                        "rank_tag": ep["rank_tag"],
+                        "recommendation": ep["recommendation"],
+                        "ml_tp_multiplier": tp_info["tp_multiplier"],
+                        "ml_target_dollar": tp_info["target_dollar"],
+                        "ml_strategy": tp_info["strategy_name"]
+                    })
+                rankings.sort(key=lambda x: x["ease_score"], reverse=True)
+                state["ml_symbol_rankings"] = rankings
+                state["ml_summary"] = ml_brain.get_summary()
+            except Exception as _ml_rank_err:
+                print(f"[ML BRAIN RANK ERROR] {_ml_rank_err}")
 
         save_challenge_20_state(state)
         return state
@@ -1742,9 +1789,29 @@ def check_and_execute_challenge_20(sym, bias, confidence_score, info, tick, atr,
         if dollar_risk > 1.05:
             return {"executed": False, "message": f"Calculated risk ${dollar_risk:.2f} exceeds $1.00 limit"}
 
-        # 1:2.2 Asymmetric Target (+11% gain on $20 budget)
-        tp_dist = stop_dist * 2.2
+        # ML BRAIN: Real-time Ease Score & Adaptive Dynamic Take Profit
+        rates = mt5.copy_rates_from_pos(sym, mt5.TIMEFRAME_M15, 0, 30)
+        ease_score = 65
+        tp_multiplier = 2.2
         target_dollar = round(dollar_risk * 2.2, 2)
+        ml_regime = "NormalVol_Trending"
+        ml_action_id = 1
+        ml_strategy = "Standard Trend Target (2.2x)"
+
+        if ml_brain:
+            ep = ml_brain.predict_symbol_ease(sym, rates, info, tick)
+            ease_score = ep.get("ease_score", 65)
+            if ease_score < 40:
+                return {"executed": False, "message": f"ML Brain blocked {sym}: Ease Score too low ({ease_score}/100: Excessive Wicks/Chop)"}
+            
+            tp_pred = ml_brain.predict_dynamic_tp(sym, rates, atr, bias, dollar_risk=dollar_risk)
+            tp_multiplier = tp_pred.get("tp_multiplier", 2.2)
+            target_dollar = tp_pred.get("target_dollar", round(dollar_risk * tp_multiplier, 2))
+            ml_regime = tp_pred.get("regime", "NormalVol_Trending")
+            ml_action_id = tp_pred.get("action_id", 1)
+            ml_strategy = tp_pred.get("strategy_name", "Standard Trend Target (2.2x)")
+
+        tp_dist = stop_dist * tp_multiplier
 
         entry_p = tick.ask if bias == "BUY" else tick.bid
         sl_p = round(entry_p - stop_dist, digits) if bias == "BUY" else round(entry_p + stop_dist, digits)
@@ -1789,7 +1856,12 @@ def check_and_execute_challenge_20(sym, bias, confidence_score, info, tick, atr,
             "floating_profit": 0.0,
             "status": "ACTIVE",
             "opened_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "notes": f"Auto-Executed (Conf {confidence_score}%): {tech_signals[:80]}"
+            "notes": f"Auto-Executed (Conf {confidence_score}% | ML Ease {ease_score}/100): {tech_signals[:60]}",
+            "ml_ease_score": ease_score,
+            "ml_tp_multiplier": tp_multiplier,
+            "ml_regime": ml_regime,
+            "ml_action_id": ml_action_id,
+            "ml_strategy": ml_strategy
         }
         state.setdefault("active_positions", []).append(new_pos)
         save_challenge_20_state(state)
@@ -1797,7 +1869,7 @@ def check_and_execute_challenge_20(sym, bias, confidence_score, info, tick, atr,
         return {
             "executed": True,
             "ticket": ticket,
-            "message": f"C20 Challenge trade FILLED: {bias} {lot} {sym} #{ticket} (Risk: ${dollar_risk}, Target: +${target_dollar})"
+            "message": f"C20 Challenge trade FILLED: {bias} {lot} {sym} #{ticket} (Risk: ${dollar_risk}, ML TP {tp_multiplier}x: +${target_dollar})"
         }
 
 def close_challenge_20_position(ticket):
@@ -2647,6 +2719,86 @@ HTML_PAGE = """<!DOCTYPE html>
           <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Strict Risk / Reward</div>
           <div class="text-base font-black font-mono text-emeraldaccent mt-1.5">Risk: $1.00 &bull; TP: $2.20</div>
           <div class="text-[10px] text-slate-400 font-mono mt-0.5">5.0% Risk &bull; 11.0% Reward</div>
+        </div>
+      </div>
+
+      <!-- MACHINE LEARNING TRADING BRAIN (Symbol Ease & Dynamic Take Profit Optimization) -->
+      <div class="p-6 rounded-2xl bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900 border border-purple-500/30 shadow-xl space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🧠</span>
+              <h3 class="text-sm font-bold text-white uppercase tracking-wider">Machine Learning Intelligence & Adaptive TP Engine</h3>
+              <span class="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-mono font-bold border border-purple-500/40 animate-pulse">REINFORCEMENT LEARNER ACTIVE</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+              Online Self-Learning System: Analyzes Kaufman Trend Efficiency (KER), noise/wick ratios, and Bayesian bandit probabilities to pick <strong>the easiest symbols to trade</strong>. Dynamically predicts the <strong>optimal Take-Profit multiplier (1.8x to 2.8x)</strong> to squeeze maximum profit from your $20 budget without getting caught in reversals.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="fetchChallenge20State()" class="px-3 py-1.5 rounded-lg bg-purple-900/40 hover:bg-purple-900/60 text-purple-200 border border-purple-500/30 text-xs font-bold transition flex items-center gap-1.5">
+              <span>⚡</span> Refresh ML State
+            </button>
+            <button onclick="resetMLModelModal()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 text-[11px] font-medium transition">
+              Reset Weights
+            </button>
+          </div>
+        </div>
+
+        <!-- ML Metrics & Adaptive TP Status Strip -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+          <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/20">
+            <div class="text-[10px] text-slate-400 uppercase font-sans">Current Top Easy Symbol</div>
+            <div id="mlTopSymbol" class="text-base font-bold text-amber-300 mt-0.5">Scanning...</div>
+            <div id="mlTopSymbolDesc" class="text-[10px] text-slate-500 mt-0.5">Evaluating trend efficiency & low wicks</div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/20">
+            <div class="text-[10px] text-slate-400 uppercase font-sans">Adaptive Dynamic TP</div>
+            <div id="mlDynamicTp" class="text-base font-bold text-emeraldaccent mt-0.5">1.8x - 2.8x Dynamic R:R</div>
+            <div id="mlDynamicTpDesc" class="text-[10px] text-slate-500 mt-0.5">Q-Learner adjusts target by Volatility Regime</div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/20">
+            <div class="text-[10px] text-slate-400 uppercase font-sans">Self-Learning Trades Analyzed</div>
+            <div id="mlTradesTrained" class="text-base font-bold text-cyanaccent mt-0.5">0 Epochs Trained</div>
+            <div id="mlCumReward" class="text-[10px] text-slate-500 mt-0.5">Cumulative Reward: +0.00 R</div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-950/80 border border-purple-500/20">
+            <div class="text-[10px] text-slate-400 uppercase font-sans">Feature Importance Weights</div>
+            <div class="text-[11px] text-purple-300 mt-0.5 font-bold">KER: 40% &bull; Low Wick: 30%</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Spread: 15% &bull; Bandit Win: 15%</div>
+          </div>
+        </div>
+
+        <!-- Live Ease-of-Trading Leaderboard Table -->
+        <div class="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/60">
+          <div class="px-4 py-2.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs">
+            <span class="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <span>📊</span> Live Machine Learning Ease-of-Trading Leaderboard
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Ranked by lowest noise & highest win probability</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                <tr>
+                  <th class="p-2.5">Rank & Symbol</th>
+                  <th class="p-2.5">Ease Score (0-100)</th>
+                  <th class="p-2.5">Trend Cleanliness (KER)</th>
+                  <th class="p-2.5">Noise / Wick Ratio</th>
+                  <th class="p-2.5">Spread Friction</th>
+                  <th class="p-2.5">ML Dynamic Target</th>
+                  <th class="p-2.5">ML Status / Recommendation</th>
+                </tr>
+              </thead>
+              <tbody id="mlLeaderboardTbody" class="divide-y divide-slate-800/60">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -3672,6 +3824,75 @@ HTML_PAGE = """<!DOCTYPE html>
           }).join('');
         }
       }
+
+      // 7. Machine Learning Intelligence & Leaderboard
+      const mlRankings = data.ml_symbol_rankings || [];
+      const mlSummary = data.ml_summary || {};
+
+      if (mlRankings.length > 0) {
+        const top = mlRankings[0];
+        const mlTopSymEl = document.getElementById('mlTopSymbol');
+        const mlTopDescEl = document.getElementById('mlTopSymbolDesc');
+        if (mlTopSymEl) mlTopSymEl.innerText = `${top.symbol} (Ease ${top.ease_score}/100)`;
+        if (mlTopDescEl) mlTopDescEl.innerText = `Clean trend (KER ${top.ker}) &bull; ${top.rank_tag}`;
+
+        const mlDynTpEl = document.getElementById('mlDynamicTp');
+        const mlDynDescEl = document.getElementById('mlDynamicTpDesc');
+        if (mlDynTpEl) mlDynTpEl.innerText = `${top.ml_tp_multiplier}x Dynamic Target (+$${top.ml_target_dollar})`;
+        if (mlDynDescEl) mlDynDescEl.innerText = top.ml_strategy;
+      }
+
+      const mlTradesEl = document.getElementById('mlTradesTrained');
+      const mlRewardEl = document.getElementById('mlCumReward');
+      if (mlTradesEl) mlTradesEl.innerText = `${mlSummary.epochs_trained || 0} Epochs Trained`;
+      if (mlRewardEl) mlRewardEl.innerText = `Cumulative Reward: ${(mlSummary.cumulative_reward >= 0 ? '+' : '')}${(mlSummary.cumulative_reward || 0).toFixed(2)} R`;
+
+      const mlLeaderTbody = document.getElementById('mlLeaderboardTbody');
+      if (mlLeaderTbody && mlRankings.length > 0) {
+        mlLeaderTbody.innerHTML = mlRankings.map((r, idx) => {
+          const isTop = idx === 0;
+          const scoreColor = r.ease_score >= 70 ? 'text-emeraldaccent font-black' : (r.ease_score >= 50 ? 'text-amber-400 font-bold' : 'text-crimsonaccent font-bold');
+          const badgeClass = r.ease_score >= 70 ? 'bg-emerald-500/20 text-emeraldaccent border-emerald-500/40' : (r.ease_score >= 50 ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-red-500/20 text-crimsonaccent border-red-500/30');
+          return `
+            <tr class="hover:bg-slate-900/60 transition ${isTop ? 'bg-purple-950/20' : ''}">
+              <td class="p-2.5">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-5 text-center font-bold ${isTop ? 'text-amber-400 font-black' : 'text-slate-400'}">#${idx + 1}</span>
+                  <span class="font-bold text-white">${r.symbol}</span>
+                  ${isTop ? '<span class="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">TOP PICK</span>' : ''}
+                </div>
+              </td>
+              <td class="p-2.5 ${scoreColor}">
+                <div class="flex items-center gap-2">
+                  <div class="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full ${r.ease_score >= 70 ? 'bg-emeraldaccent' : (r.ease_score >= 50 ? 'bg-amber-400' : 'bg-rose-500')}" style="width: ${r.ease_score}%"></div>
+                  </div>
+                  <span>${r.ease_score}/100</span>
+                </div>
+              </td>
+              <td class="p-2.5 text-slate-200">${r.ker} <span class="text-[9px] text-slate-500">(${r.ker >= 0.5 ? 'Strong Trend' : 'Chop'})</span></td>
+              <td class="p-2.5 text-slate-300">${r.noise_ratio} <span class="text-[9px] text-slate-500">(${r.noise_ratio < 0.45 ? 'Clean' : 'Wicks'})</span></td>
+              <td class="p-2.5 text-cyanaccent font-bold">${r.spread_friction}%</td>
+              <td class="p-2.5 text-emeraldaccent font-bold">${r.ml_tp_multiplier}x (+$${r.ml_target_dollar})</td>
+              <td class="p-2.5">
+                <span class="px-2 py-0.5 rounded border text-[10px] font-bold ${badgeClass}">${r.rank_tag}</span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    async function resetMLModelModal() {
+      if (!confirm('Reset Machine Learning model weights and training memory back to defaults?')) return;
+      try {
+        const res = await fetch('/api/challenge20/ml_reset', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'ML weights reset.');
+        fetchChallenge20State();
+      } catch (err) {
+        alert('Reset error: ' + err);
+      }
     }
 
     async function toggleChallenge20Auto() {
@@ -4473,6 +4694,12 @@ class DerivServer(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(state).encode("utf-8"))
+        elif url.path == "/api/challenge20/ml_state":
+            summary = ml_brain.get_summary() if ml_brain else {}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(summary).encode("utf-8"))
         elif url.path == "/api/state":
             state = get_deriv_full_state()
             self.send_response(200)
@@ -4611,6 +4838,13 @@ class DerivServer(BaseHTTPRequestHandler):
         elif url.path == "/api/challenge20/close_position":
             ticket = int(data.get("ticket"))
             res = close_challenge_20_position(ticket)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+        elif url.path == "/api/challenge20/ml_reset":
+            res = ml_brain.reset_model() if ml_brain else {"success": False, "message": "ML not loaded"}
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()

@@ -1,0 +1,74 @@
+{
+  "version": "1.0-AdaptiveReinforcement",
+  "epochs_trained": 3,
+  "total_trades_analyzed": 3,
+  "cumulative_reward": 2.49,
+  "feature_weights": {
+    "trend_efficiency_ker": 0.4,
+    "low_noise_ratio": 0.3,
+    "spread_efficiency": 0.15,
+    "bandit_historical_prob": 0.15
+  },
+  "symbol_bandit": {
+    "Step Index": {
+      "alpha": 5,
+      "beta": 1,
+      "total_trades": 4,
+      "avg_rr": 2.2
+    },
+    "Volatility 75 Index": {
+      "alpha": 2,
+      "beta": 2,
+      "total_trades": 2,
+      "avg_rr": 2.0
+    },
+    "EURUSD": {
+      "alpha": 3,
+      "beta": 2,
+      "total_trades": 3,
+      "avg_rr": 2.1
+    },
+    "GBPUSD": {
+      "alpha": 2,
+      "beta": 2,
+      "total_trades": 2,
+      "avg_rr": 2.0
+    },
+    "Volatility 25 (1s) Index": {
+      "alpha": 4,
+      "beta": 2,
+      "total_trades": 4,
+      "avg_rr": 2.2
+    }
+  },
+  "q_table_tp": {
+    "LowVol_Choppy": [
+      0.65,
+      0.45,
+      0.2
+    ],
+    "LowVol_Trending": [
+      0.55,
+      0.7,
+      0.4
+    ],
+    "NormalVol_Choppy": [
+      0.4404,
+      0.5,
+      0.25
+    ],
+    "NormalVol_Trending": [
+      0.45,
+      0.967,
+      0.65
+    ],
+    "HighVol_Expansion": [
+      0.3,
+      0.6,
+      0.85
+    ]
+  },
+  "learning_rate": 0.15,
+  "discount_factor": 0.9,
+  "last_updated": "2026-10-24 16:59:21 UTC"
+}
